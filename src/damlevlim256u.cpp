@@ -416,7 +416,6 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
         /************************************************************************
         ** damlevlim256 step three
         ************************************************************************/
-	fclose(file);
 	
         /* throughout these loops, g will be equal to i minus one */
         g = 0;
@@ -424,6 +423,9 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 	    /*********************************************************************
 	    ** damlevlim256 step four
 	    *********************************************************************/
+#ifdef DEBUG
+            fprintf(file, "%s - step.3 i(%d)<n(%lld)\n", getTS(), i, n); fflush(file);
+#endif
 
 	    k = i;
 
@@ -434,6 +436,9 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 	        /******************************************************************
 	        ** damlevlim256 step five, six, seven
 	        ******************************************************************/
+#ifdef DEBUG
+                fprintf(file, "%s - step.4 j(%d)<m(%lld)\n", getTS(), j, m); fflush(file);
+#endif
 
 	        h = k;
 	        k += 256;
