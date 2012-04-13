@@ -16,7 +16,7 @@ Updated 20120328
 	is case-insensitive.
     - Added debuging output to a temporary file
     - Support for x86_64 and 32bits architecture
-	by diego dot torres at gmail.com
+	by Diego Torres, diego dot torres at gmail.com
 
 Compiling
     Run Make.sh (adjust paths of mysql include files and mysqlclient library)
@@ -31,6 +31,16 @@ Loading UDFs in MySQL
 
 # DROP FUNCTION IF EXISTS mysql.damlevlim256u;
 # CREATE FUNCTION damlevlim256u RETURNS INT SONAME 'mysqldamlevlim256u32.so';
+
+Using damlevlim256u
+
+mysql> select damlevlim256('coche', 'çóche', 5);
++--------------------------------------+
+| damlevlim256u('coche', 'çòche', 5) |
++--------------------------------------+
+|                                    0 |
++--------------------------------------+
+1 row in set (0.00 sec)
 
 Redistribute as you wish, but leave this information intact.
     The levenshtein function is derived from the C implementation
