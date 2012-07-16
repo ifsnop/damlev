@@ -1,6 +1,6 @@
 Damerau-Levenshtein Distance UDF for MySQL
 Supports upper bounding for fast searching and UTF-8 case
-insensitive throught iconv
+insensitive throught iconv.
 
 Updated 20120328
 	by Diego Torres <diego dot torres at gmail.com>
