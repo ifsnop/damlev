@@ -1,4 +1,11 @@
 Damerau-Levenshtein Distance with Limit for MySQL
+Updated 20120328
+    by Diego Torres <diego dot torres at gmail.com>
+    - Support UTF8 characters, using iconv, so comparation
+	is case-insensitive.
+    - Added debuging output to a temporary file
+    - Support for x86_64 and 32bits architecture
+
     by Sean Collins (sean at lolyco.com) 27Aug2008
     updated 16Apr2009 to fix:
 	- Tomas' bug (damlevlim("h","hello",2) i get 4)
@@ -10,13 +17,6 @@ Damerau-Levenshtein Distance with Limit for MySQL
 
 Levenshtein Distance Algorithm implementation as MySQL UDF
     by Joshua Drew for SpinWeb Net Designs, Inc. on 2003-12-28.
-
-Updated 20120328
-    - Support UTF8 characters, using iconv, so comparation
-	is case-insensitive.
-    - Added debuging output to a temporary file
-    - Support for x86_64 and 32bits architecture
-	by Diego Torres, diego dot torres at gmail.com
 
 Compiling
     Run Make.sh (adjust paths of mysql include files and mysqlclient library)
