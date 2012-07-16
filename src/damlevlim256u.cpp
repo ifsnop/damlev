@@ -1,30 +1,38 @@
-/* Damerau-Levenshtein Distance with Limit for MySQL
- * by Sean Collins (sean at lolyco.com) 27Aug2008
- * updated 16Apr2009 to fix:
- *  Tomas' bug (damlevlim("h","hello",2) i get 4)
- * Adapted from Josh Drew's levenshtein code using pseudo
- * code from
- * http://en.wikipedia.org/wiki/Damerau–Levenshtein_distance
- *  - an optimal string alignment algorithm, as opposed to
- *  'edit distance' as per the notes in the wp article
- *
- * Levenshtein Distance Algorithm implementation as MySQL UDF
- *	by Joshua Drew for SpinWeb Net Designs, Inc. on 2003-12-28.
- * Redistribute as you wish, but leave this information intact.
- *	The levenshtein function is derived from the C implementation
- *	by Lorenzo Seidenari. More information about the Levenshtein
- *	Distance Algorithm can be found at http://www.merriampark.com/ld.htm
- *
- * Updated 20120328 to support UTF8 characters, using iconv, so comparation
- * 	is case-insensitive.
- * Added debuging output to a temporary file
- * Support for x86_64 and 32bits architecture
- * 	by diego dot torres at gmail.com
- * 
- * Loading UDFs in MySQL
- *    DROP FUNCTION IF EXISTS mysql.damlevlim256u;
- *    CREATE FUNCTION damlevlim256u RETURNS INT SONAME 'mysqldamlevlim256u.so';
- *
+/* Damerau-Levenshtein Distance UDF for MySQL
+Supports upper bounding for fast searching and UTF-8 case
+insensitive throught iconv
+
+Updated 20120328
+	by Diego Torres <diego dot torres at gmail.com>
+	- Support UTF8 characters, using iconv
+	(http://en.wikipedia.org/wiki/Iconv), and
+	force case-insensitivenes.
+	- Added debuging output to a temporary file
+	- Support for x86_64 and 32bits architecture
+	- Provided make.sh, documentation and examples
+
+Updated 20090416
+	by Sean Collins <sean at lolyco.com>
+	- Tomas' bug (damlevlim("h","hello",2) i get 4)
+	Adapted from Josh Drew's levenshtein code using pseudo
+	code from
+	http://en.wikipedia.org/wiki/Damerau–Levenshtein_distance
+	- an optimal string alignment algorithm, as opposed to
+	'edit distance' as per the notes in the wp article
+
+Adapted 20080827
+	by Sean Collins <sean at lolyco.com>
+
+Originally 20031228
+	Levenshtein Distance Algorithm implementation as MySQL UDF
+   	by Joshua Drew for SpinWeb Net Designs, Inc. on 2003-12-28.
+
+Derived 
+	The levenshtein function is derived from the C implementation
+   	by Lorenzo Seidenari. More information about the Levenshtein
+	Distance Algorithm can be found at http://www.merriampark.com/ld.htm
+
+Redistribute as you wish, but leave this information intact.
 */
 
 #ifdef STANDARD
