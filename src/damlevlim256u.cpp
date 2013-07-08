@@ -67,6 +67,8 @@ typedef long long longlong;
 #include <stdint.h>
 #ifdef HAVE_DLOPEN
 
+//static pthread_mutex_t LOCK;
+
 /******************************************************************************
 ** debug function declarations
 ******************************************************************************/
@@ -187,6 +189,8 @@ my_bool damlevlim256u_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
     ** among the xxx_init(), xxx_deinit(), and xxx() functions */
     initid->ptr = (char*) workspace;
 
+//    (void) pthread_mutex_init(&LOCK,MY_MUTEX_INIT_SLOW);
+
     return 0;
 }
 
@@ -202,6 +206,8 @@ void damlevlim256u_deinit(UDF_INIT *initid)
 {
     if (initid->ptr != NULL)
         delete [] initid->ptr;
+
+//    (void) pthread_mutex_destroy(&LOCK);
 }
 
 /******************************************************************************
@@ -254,16 +260,17 @@ char * utf8toascii (FILE *file, iconv_t ic, char *s, int l) { //euc)
     size_t len = l;
     size_t retlen = 2*l;
 
-    buffer = (char*)calloc (retlen,1);
-    ret = buffer;
+    ret = (char*)calloc (retlen,1);
+    buffer = ret;
 
     //fprintf(file, "%s - s(%08X) len(%08X) ret(%08X) retlen(%08X)\n", getTS(),
     //  (unsigned int) s, (unsigned int) len, (unsigned int) ret, (unsigned int) retlen);
     //  fflush(file);
 
-    iconv_value = iconv(ic, &s, &len, &buffer, &retlen);
+    iconv_value = iconv(ic, &s, &len, &ret, &retlen);
     /* Handle failures. */
     if ( iconv_value == (size_t) -1 ) {
+#ifdef DEBUG
         switch (errno) {
             // See "man 3 iconv" for an explanation. 
             case EILSEQ:
@@ -276,15 +283,17 @@ char * utf8toascii (FILE *file, iconv_t ic, char *s, int l) { //euc)
                 fprintf(file, "%s - No more room.\n", getTS());
                 break;
             default:
-                fprintf(file, "%s - iconv failed: %s\n", getTS(), strerror(errno));fflush(file);
+                fprintf(file, "%s - iconv failed: %s\n", getTS(), strerror(errno));
         }
         fflush(file);
+#endif
         return NULL;
     }
+#ifdef DEBUG
     fprintf(file, "%s - inside iconv_value(%zd) retlen(%zd)\n", getTS(), iconv_value, retlen);
-    writeDebugHEXSize(file, "inside", ret, retlen);
-
-    return ret;
+    writeDebugHEXSize(file, "inside", buffer, retlen);
+#endif
+    return buffer;
 }
 
 
@@ -303,8 +312,8 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
                      char *error) {
     /* s is the first user-supplied argument; t is the second
     ** the levenshtein distance between s and t is to be computed */
-    /*const*/ char *s = args->args[0];
-    /*const*/ char *t = args->args[1];
+    /*const*/ char *s = args->args[0]; char *s_c = NULL;
+    /*const*/ char *t = args->args[1]; char *t_c = NULL;
     long long limit_arg = *((long long*)args->args[2]);
     /* get a pointer to the memory allocated in damlevlim256_init() */
     int *d = (int*) initid->ptr;
@@ -374,14 +383,18 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
             writeDebugHEX(file, "pre", s);
             //fprintf(file, "%s - s(%16LX) n(%16LX)\n", getTS(), (uintptr_t)s, (uintptr_t) n); fflush(file);
 #endif
-            char * str = utf8toascii(file, ic, s, n);
-            n = strlen(str);
-            strncpy(s, str, n);
-            s[n] = '\0';
+            if ( (s_c = utf8toascii(file, ic, s, n)) == NULL )
+                return -1;
+            n = strlen(s_c);
+//            strncpy(s, str, n);
+//            s[n] = '\0';
 #ifdef DEBUG
-            writeDebugHEX(file, "post", s);
-            free(str);
+            writeDebugHEX(file, "post", s_c);
+//            free(str);
 #endif
+        } else {
+            s_c = (char*)calloc(n+1, 1);
+            strncpy(s_c, s, n);
         }
 
         if (m!=mU) {
@@ -389,27 +402,31 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
             fprintf(file, "%s - t(%s) has utf8 chars m(%lld) mU(%d)\n", getTS(), t, m, mU);
             writeDebugHEX(file, "pre", t);
 #endif
-            char * str = utf8toascii(file, ic, t, m);
-            m = strlen(str);
-            strncpy(t, str, m);
-            t[m] = '\0';
+            if ( (t_c = utf8toascii(file, ic, t, m)) == NULL )
+                return -1;
+            m = strlen(t_c);
+//            strncpy(t, str, m);
+//            t[m] = '\0';
 #ifdef DEBUG
-            writeDebugHEX(file, "post", t);
-            free(str);
+            writeDebugHEX(file, "post", t_c);
+//            free(str);
 #endif
+        } else {
+            t_c = (char*)calloc(m+1, 1);
+            strncpy(t_c, t, m);
         }
 
         if (n > 255) {
-            n = 255; s[n] = '\0';
+            n = 255; s_c[n] = '\0';
         }
 
         if (m > 255) {
-            m = 255; t[m] = '\0';
+            m = 255; t_c[m] = '\0';
         }
 
         iconv_end(ic);
 #ifdef DEBUG
-        fprintf(file, "%s - step.2 n(%lld) s(%s) m(%lld) t(%s) limit_arg(%lld)\n", getTS(), n, s, m, t, limit_arg); fflush(file);
+        fprintf(file, "%s - step.2 n(%lld) s(%s) m(%lld) t(%s) limit_arg(%lld)\n", getTS(), n, s_c, m, t_c, limit_arg); fflush(file);
 #endif
         /************************************************************************
         ** damlevlim256 step two
@@ -431,7 +448,7 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
             ** damlevlim256 step four
             *********************************************************************/
 #ifdef DEBUG
-            //fprintf(file, "%s - step.3 i(%d)<n(%lld)\n", getTS(), i, n); fflush(file);
+            fprintf(file, "%s - step.3 i(%d)<n(%lld)\n", getTS(), i, n); fflush(file);
 #endif
             k = i;
 
@@ -451,14 +468,14 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 
                 min = d[h] + 1;
                 b = d[k-1] + 1;
-                if ( !strncasecmp(&s[g], &t[f], 1) ) { //(s[g] == t[f])
+                if ( !strncasecmp(&s_c[g], &t_c[f], 1) ) { //(s[g] == t[f])
                     cost = 0;
                 } else {
                     cost = 1;
                     /* transposition */
                     if (i < l1 && j < l2) {
-                        if (strncasecmp(&s[i], &t[f], 1)==0 && //s[i] == t[f] && s[g] == t[j]) -
-                            strncasecmp(&s[g], &t[j], 1)==0) {
+                        if (strncasecmp(&s_c[i], &t_c[f], 1)==0 && //s[i] == t[f] && s[g] == t[j]) -
+                            strncasecmp(&s_c[g], &t_c[j], 1)==0) {
                             tr = d[(h) - 1];
                             if (tr < min)
                                 min = tr;
@@ -487,11 +504,16 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
                 fprintf(file, "%s - return.1 limit_arg(%lld)\n", getTS(), limit_arg);
                 fflush(file); fclose(file);
 #endif
+                free(s_c); free(t_c);
                 return limit_arg;
             }
             /* g will equal i minus one for the next iteration */
             g = i;
         }
+#ifdef DEBUG
+        fprintf(file, "%s - step.5 (prefree) n(%lld) s(%s) m(%lld) t(%s) limit_arg(%lld)\n", getTS(), n, s_c, m, t_c, limit_arg); fflush(file);
+#endif
+        free(s_c); free(t_c);
 
         if (d[k] >= limit) {
 #ifdef DEBUG
