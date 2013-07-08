@@ -1,36 +1,40 @@
 /* Damerau-Levenshtein Distance UDF for MySQL
 Supports upper bounding for fast searching and UTF-8 case
 insensitive throught iconv
+Updated 20130707
+        by Diego Torres
+        - Added more documentation and some info on errors
+        when compiling cross-platform.
 
 Updated 20120328
-	by Diego Torres <diego dot torres at gmail.com>
-	- Support UTF8 characters, using iconv
-	(http://en.wikipedia.org/wiki/Iconv), and
-	force case-insensitivenes.
-	- Added debuging output to a temporary file
-	- Support for x86_64 and 32bits architecture
-	- Provided make.sh, documentation and examples
+        by Diego Torres <diego dot torres at gmail.com>
+        - Support UTF8 characters, using iconv
+        (http://en.wikipedia.org/wiki/Iconv), and
+        force case-insensitivenes.
+        - Added debuging output to a temporary file
+        - Support for x86_64 and 32bits architecture
+        - Provided make.sh, documentation and examples
 
 Updated 20090416
-	by Sean Collins <sean at lolyco.com>
-	- Tomas' bug (damlevlim("h","hello",2) i get 4)
-	Adapted from Josh Drew's levenshtein code using pseudo
-	code from
-	http://en.wikipedia.org/wiki/Damerau–Levenshtein_distance
-	- an optimal string alignment algorithm, as opposed to
-	'edit distance' as per the notes in the wp article
+        by Sean Collins <sean at lolyco.com>
+        - Tomas' bug (damlevlim("h","hello",2) i get 4)
+        Adapted from Josh Drew's levenshtein code using pseudo
+        code from
+        http://en.wikipedia.org/wiki/Damerau–Levenshtein_distance
+        - an optimal string alignment algorithm, as opposed to
+        'edit distance' as per the notes in the wp article
 
 Adapted 20080827
-	by Sean Collins <sean at lolyco.com>
+        by Sean Collins <sean at lolyco.com>
 
 Originally 20031228
-	Levenshtein Distance Algorithm implementation as MySQL UDF
-   	by Joshua Drew for SpinWeb Net Designs, Inc. on 2003-12-28.
+        Levenshtein Distance Algorithm implementation as MySQL UDF
+        by Joshua Drew for SpinWeb Net Designs, Inc. on 2003-12-28.
 
-Derived 
-	The levenshtein function is derived from the C implementation
-   	by Lorenzo Seidenari. More information about the Levenshtein
-	Distance Algorithm can be found at http://www.merriampark.com/ld.htm
+Derived
+        The levenshtein function is derived from the C implementation
+        by Lorenzo Seidenari. More information about the Levenshtein
+        Distance Algorithm can be found at http://www.merriampark.com/ld.htm
 
 Redistribute as you wish, but leave this information intact.
 */
@@ -74,20 +78,18 @@ char * getTS() {
     time_t now;
     struct tm ts;
     bzero(buf, 80);
-    time(&now); 
-    ts = *localtime(&now); 
-    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &ts); 
+    time(&now);
+    ts = *localtime(&now);
+    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &ts);
     return buf;
 }
 
 
 void writeDebugHEX(FILE *file, const char *pre, const char *s) {
 
-    return;
-
     fprintf(file, "%s - %s strlen(%zu) ", getTS(), (pre == NULL ? "" : pre), strlen(s) );
     for (size_t i = 0; i<strlen(s); i++)
-	fprintf(file, "[%c]%02X ", s[i], (unsigned int) *((unsigned char *)s+i));
+        fprintf(file, "[%c]%02X ", s[i], (unsigned int) *((unsigned char *)s+i));
     fprintf(file, "\n");
     fflush(file);
     return;
@@ -95,11 +97,9 @@ void writeDebugHEX(FILE *file, const char *pre, const char *s) {
 
 void writeDebugHEXSize(FILE *file, const char *pre, const char *s, unsigned int l) {
 
-    return;
-
     fprintf(file, "%s - %s strlen(%zu) ", getTS(), (pre == NULL ? "" : pre), strlen(s) );
     for (size_t i = 0; i<l; i++)
-	fprintf(file, "[%c]%02X ", s[i], (unsigned int) *((unsigned char *)s+i));
+        fprintf(file, "[%c]%02X ", s[i], (unsigned int) *((unsigned char *)s+i));
     fprintf(file, "\n");
     fflush(file);
     return;
@@ -111,11 +111,11 @@ void writeDebugHEXSize(FILE *file, const char *pre, const char *s, unsigned int 
 ******************************************************************************/
 
 extern "C" {
-	my_bool		damlevlim256u_init(UDF_INIT *initid, UDF_ARGS *args,
-	                             char *message);
-	void			damlevlim256u_deinit(UDF_INIT *initid);
-	longlong		damlevlim256u(UDF_INIT *initid, UDF_ARGS *args,
-	                        char *is_null, char *error);
+        my_bool         damlevlim256u_init(UDF_INIT *initid, UDF_ARGS *args,
+                            char *message);
+        void            damlevlim256u_deinit(UDF_INIT *initid);
+        longlong        damlevlim256u(UDF_INIT *initid, UDF_ARGS *args,
+                            char *is_null, char *error);
 }
 
 /******************************************************************************
@@ -123,82 +123,80 @@ extern "C" {
 ******************************************************************************/
 
 /******************************************************************************
-** purpose:	called once for each SQL statement which invokes DAMLEVLIM();
-**			checks arguments, sets restrictions, allocates memory that
-**			will be used during the main DAMLEVLIM() function (the same
-**			memory will be reused for each row returned by the query)
-** receives:	pointer to UDF_INIT struct which is to be shared with all
-**			other functions (damlevlim256() and damlevlim256_deinit()) -
-**			the components of this struct are described in the MySQL manual;
-**			pointer to UDF_ARGS struct which contains information about
-**			the number, size, and type of args the query will be providing
-**			to each invocation of damlevlim256(); pointer to a char
-**			array of size MYSQL_ERRMSG_SIZE in which an error message
-**			can be stored if necessary
-** returns:	1 => failure; 0 => successful initialization
+** purpose:     called once for each SQL statement which invokes DAMLEVLIM();
+**              checks arguments, sets restrictions, allocates memory that
+**              will be used during the main DAMLEVLIM() function (the same
+**              memory will be reused for each row returned by the query)
+** receives:    pointer to UDF_INIT struct which is to be shared with all
+**              other functions (damlevlim256() and damlevlim256_deinit()) -
+**              the components of this struct are described in the MySQL manual;
+**              pointer to UDF_ARGS struct which contains information about
+**              the number, size, and type of args the query will be providing
+**              to each invocation of damlevlim256(); pointer to a char
+**              array of size MYSQL_ERRMSG_SIZE in which an error message
+**              can be stored if necessary
+** returns:     1 => failure; 0 => successful initialization
 ******************************************************************************/
 my_bool damlevlim256u_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 {
-	int *workspace;
+    int *workspace;
 
-	/* make sure user has provided three arguments */
-	if (args->arg_count != 3)
-	{
-		strcpy(message, "DAMLEVLIM() requires three arguments");
-		return 1;
-	}
-	/* make sure both arguments are strings - they could be cast to strings,
-	** but that doesn't seem useful right now */
-	else if (args->arg_type[0] != STRING_RESULT || 
-	         args->arg_type[1] != STRING_RESULT ||
-					 args->arg_type[2] != INT_RESULT)
-	{
-		strcpy(message, "DAMLEVLIM() requires arguments (string, string, int)");
-		return 1;
-	}
+    /* make sure user has provided three arguments */
+    if (args->arg_count != 3) {
+        strcpy(message, "DAMLEVLIM() requires three arguments");
+        return 1;
+    } else {
+    /* make sure both arguments are strings - they could be cast to strings,
+    ** but that doesn't seem useful right now */
+        if (args->arg_type[0] != STRING_RESULT ||
+            args->arg_type[1] != STRING_RESULT ||
+            args->arg_type[2] != INT_RESULT) {
+            strcpy(message, "DAMLEVLIM() requires arguments (string, string, int)");
+            return 1;
+        }
+    }
 
-	/* set the maximum number of digits MySQL should expect as the return
-	** value of the DAMLEVLIM() function */
-	initid->max_length = 3;
+    /* set the maximum number of digits MySQL should expect as the return
+    ** value of the DAMLEVLIM() function */
+    initid->max_length = 3;
 
-	/* damlevlim256() will not be returning null */
-	initid->maybe_null = 0;
+    /* damlevlim256() will not be returning null */
+    initid->maybe_null = 0;
 
-	/* attempt to allocate memory in which to calculate distance */
-      // workspace = new int[(args->lengths[0] + 1) * (args->lengths[1] + 1)];
-	 workspace = new int[256 * 256];
-		
-	if (workspace == NULL)
-	{
-		strcpy(message, "Failed to allocate memory for damlevlim256 function");
-		return 1;
-	}
+    /* attempt to allocate memory in which to calculate distance */
+    // workspace = new int[(args->lengths[0] + 1) * (args->lengths[1] + 1)];
+    workspace = new int[256 * 256];
 
-	/* initialize first row to 0..n */
-	int k;
-	for (k = 0; k < 256; k++)
-	    workspace[k] = k;
+    if (workspace == NULL) {
+        strcpy(message, "Failed to allocate memory for damlevlim256 function");
+        return 1;
+    }
 
-	/* initialize first column to 0..m */
-	k = 256;
-	for (int i = 1; i < 256; i++) {
-	    workspace[k] = i;
-	    k += 256;
-	}
-	/* initid->ptr is a char* which MySQL provides to share allocated memory
-	** among the xxx_init(), xxx_deinit(), and xxx() functions */
-	initid->ptr = (char*) workspace;
+    /* initialize first row to 0..n */
+    int k;
+    for (k = 0; k < 256; k++)
+        workspace[k] = k;
 
-	return 0;
+    /* initialize first column to 0..m */
+    k = 256;
+    for (int i = 1; i < 256; i++) {
+        workspace[k] = i;
+        k += 256;
+    }
+    /* initid->ptr is a char* which MySQL provides to share allocated memory
+    ** among the xxx_init(), xxx_deinit(), and xxx() functions */
+    initid->ptr = (char*) workspace;
+
+    return 0;
 }
 
 /******************************************************************************
-** purpose:	deallocate memory allocated by damlevlim256_init(); this func
-**			is called once for each query which invokes DAMLEVLIM(),
-**			it is called after all of the calls to damlevlim256() are done
-** receives:	pointer to UDF_INIT struct (the same which was used by
-**			damlevlim256_init() and damlevlim256())
-** returns:	nothing
+** purpose:     deallocate memory allocated by damlevlim256_init(); this func
+**              is called once for each query which invokes DAMLEVLIM(),
+**              it is called after all of the calls to damlevlim256() are done
+** receives:    pointer to UDF_INIT struct (the same which was used by
+**              damlevlim256_init() and damlevlim256())
+** returns:     nothing
 ******************************************************************************/
 void damlevlim256u_deinit(UDF_INIT *initid)
 {
@@ -207,9 +205,9 @@ void damlevlim256u_deinit(UDF_INIT *initid)
 }
 
 /******************************************************************************
-** purpose:	initialize iconv library
-** receives:	nothing
-** returns:	iconv_t handler or -1 if error
+** purpose:     initialize iconv library
+** receives:    nothing
+** returns:     iconv_t handler or -1 if error
 ******************************************************************************/
 
 iconv_t iconv_init() {
@@ -218,25 +216,24 @@ iconv_t iconv_init() {
 #ifdef DEBUG
     if (ic == (iconv_t) -1) {
         fprintf(file, "%s - Initialization failure: %s\n", getTS(), strerror(errno)); fflush(file);
-    /*    if (errno == EINVAL)
-            fprintf(stderr, "Conversion from '%s' to '%s' is not supported.\n", "UTF-8", "ascii//TRANSLITE");
-    */
+        //if (errno == EINVAL)
+        //    fprintf(file, "Conversion from '%s' to '%s' is not supported.\n", "UTF-8", "ascii//TRANSLITE");
     }
-#endif    
+#endif
     return ic;
 }
 
 /******************************************************************************
-** purpose:	close iconv library
-** receives:	iconv_t handler
-** returns:	true if success, else false
+** purpose:     close iconv library
+** receives:    iconv_t handler
+** returns:     true if success, else false
 ******************************************************************************/
 
 bool iconv_end(iconv_t ic) {
     int rc = iconv_close(ic);
     if ( rc != 0) {
 #ifdef DEBUG
-	fprintf(file, "%s - iconv_close failed: %s\n", getTS(), strerror(errno)); fflush(file);
+        fprintf(file, "%s - iconv_close failed: %s\n", getTS(), strerror(errno)); fflush(file);
 #endif
         return false;
     }
@@ -245,61 +242,62 @@ bool iconv_end(iconv_t ic) {
 
 
 /******************************************************************************
-** purpose:	helper that translates and utf8 string to ascii with extended 
-**			error codes
-** receives:	FILE handler, iconv_t hander, string to translate and length
-** returns:	ascii translated string
+** purpose:     helper that translates and utf8 string to ascii with extended
+**              error codes
+** receives:    FILE handler, iconv_t hander, string to translate and length
+** returns:     ascii translated string
 ******************************************************************************/
 
 char * utf8toascii (FILE *file, iconv_t ic, char *s, int l) { //euc)
     size_t iconv_value;
-    char *buffer,*ret; //utf8;
+    char *buffer, *ret; //utf8;
     size_t len = l;
-    size_t retlen = 2*len;
+    size_t retlen = 2*l;
 
     buffer = (char*)calloc (retlen,1);
     ret = buffer;
 
     //fprintf(file, "%s - s(%08X) len(%08X) ret(%08X) retlen(%08X)\n", getTS(),
-    //	(unsigned int) s, (unsigned int) len, (unsigned int) ret, (unsigned int) retlen);fflush(file);
+    //  (unsigned int) s, (unsigned int) len, (unsigned int) ret, (unsigned int) retlen);
+    //  fflush(file);
 
-    iconv_value = iconv(ic, &s, &len, &ret, &retlen);
+    iconv_value = iconv(ic, &s, &len, &buffer, &retlen);
     /* Handle failures. */
-    if (iconv_value == (size_t) -1) {
-/*	switch (errno) {
-	    // See "man 3 iconv" for an explanation. 
-	    case EILSEQ:
-		fprintf(file, "%s - Invalid multibyte sequence.\n", getTS());
-		break;
-	    case EINVAL:
-		fprintf(file, "%s - Incomplete multibyte sequence.\n", getTS());
-		break;
-	    case E2BIG:
-		fprintf(file, "%s - No more room.\n", getTS());
-		break;
-	    default:
-		fprintf(file, "%s - iconv failed: %s\n", getTS(), strerror(errno));fflush(file);
-	}
-	fflush(file);
-*/	return NULL;
+    if ( iconv_value == (size_t) -1 ) {
+        switch (errno) {
+            // See "man 3 iconv" for an explanation. 
+            case EILSEQ:
+                fprintf(file, "%s - Invalid multibyte sequence.(%s)\n", getTS(), s);
+                break;
+            case EINVAL:
+                fprintf(file, "%s - Incomplete multibyte sequence.(%s)\n", getTS(), s);
+                break;
+            case E2BIG:
+                fprintf(file, "%s - No more room.\n", getTS());
+                break;
+            default:
+                fprintf(file, "%s - iconv failed: %s\n", getTS(), strerror(errno));fflush(file);
+        }
+        fflush(file);
+        return NULL;
     }
-    //fprintf(file, "%s - inside iconv_value(%d) retlen(%d)\n", getTS(), iconv_value, retlen);
-    //writeDebugHEXSize(file, "inside", buffer, retlen);
+    fprintf(file, "%s - inside iconv_value(%zd) retlen(%zd)\n", getTS(), iconv_value, retlen);
+    writeDebugHEXSize(file, "inside", ret, retlen);
 
-    return buffer;
+    return ret;
 }
 
 
 /******************************************************************************
-** purpose:		compute the Levenshtein distance (edit distance) between two
-**					strings
-** receives:	pointer to UDF_INIT struct which contains pre-allocated memory
-**					in which work can be done; pointer to UDF_ARGS struct which 
-**					contains the functions arguments and data about them; pointer
-**					to mem which can be set to 1 if the result is NULL; pointer
-**					to mem which can be set to 1 if the calculation resulted in an
-**					error
-** returns:		the Levenshtein distance between the two provided strings
+** purpose:     compute the Levenshtein distance (edit distance) between two
+**              strings
+** receives:    pointer to UDF_INIT struct which contains pre-allocated memory
+**              in which work can be done; pointer to UDF_ARGS struct which
+**              contains the functions arguments and data about them; pointer
+**              to mem which can be set to 1 if the result is NULL; pointer
+**              to mem which can be set to 1 if the calculation resulted in an
+**              error
+** returns:     the Levenshtein distance between the two provided strings
 ******************************************************************************/
 longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
                      char *error) {
@@ -308,18 +306,12 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
     /*const*/ char *s = args->args[0];
     /*const*/ char *t = args->args[1];
     long long limit_arg = *((long long*)args->args[2]);
-
     /* get a pointer to the memory allocated in damlevlim256_init() */
     int *d = (int*) initid->ptr;
-
     longlong n, m;
     int b,c,f,g,h,i,j,k = 0,min, l1, l2, cost, tr, limit = limit_arg, best = 0;
-    
     iconv_t ic;
-    /*
-    wchar_t ws[512*sizeof(wchar_t)];
-    wchar_t wt[512*sizeof(wchar_t)];
-    */
+    char *ret;
 
     /***************************************************************************
     ** damlevlim256 step one
@@ -340,77 +332,84 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
     m = (t == NULL) ? 0 : args->lengths[1];
 
 #ifdef DEBUG
-    file = fopen("/tmp/mysqerr.log", "a+");
+    file = fopen("/tmp/damlevlim256u.log", "a+");
     fprintf(file, "\n%s - init damlevlim256u\n", getTS());
-/*
-    memset(ws, '\0', 512*sizeof(wchar_t));
-    memset(wt, '\0', 512*sizeof(wchar_t));
-*/
     fprintf(file, "%s - step.1 n(%lld) s(%s) m(%lld) t(%s) limit_arg(%lld)\n", getTS(), n, s, m, t, limit_arg); fflush(file);
 #endif
 
     if(n != 0 && m != 0) {
-        //if (==NULL) {
-        //    fprintf(file, "%s - error setting locale %s", getTS(), strerror(errno)); fflush(file);
-        //}
         int nU = -1, mU = -1;
-        setlocale(LC_ALL, "es_ES.UTF-8");
-	
-	if ( (nU = mbstowcs(NULL,s,0)) == -1 ) { // error
+        ret = setlocale(LC_ALL, "es_ES.UTF-8");
+        if (ret == NULL) {
 #ifdef DEBUG
-	    fprintf(file, "%s - some invalid characters found in mb string n(%lld) s(%s) (%s)\n", getTS(), n, s, strerror(errno)); fflush(file);fclose(file);
+            fprintf(file, "%s - error setting locale %s", getTS(), strerror(errno)); fflush(file); fclose(file);
 #endif
-	    return -1;	    
-	}
-	
-	if ( (mU = mbstowcs(NULL,t,0)) == -1 ) { // error
-#ifdef DEBUG
-	    fprintf(file, "%s - some invalid characters found in mb string m(%lld) t(%s) (%s)\n", getTS(), m, t, strerror(errno)); fflush(file);fclose(file);
-#endif
-	    return -1;
-	}
+            return -1;
+        }
 
+        if ( (nU = mbstowcs(NULL,s,0)) == -1 ) { // error
+#ifdef DEBUG
+            fprintf(file, "%s - some invalid characters found in mb string n(%lld) s(%s) (%s)\n", getTS(), n, s, strerror(errno)); fflush(file); fclose(file);
+#endif
+            return -1;
+        }
 
-	
-	if ( (ic = iconv_init()) == (iconv_t) -1) {
+        if ( (mU = mbstowcs(NULL,t,0)) == -1 ) { // error
 #ifdef DEBUG
-	    fclose(file);
+            fprintf(file, "%s - some invalid characters found in mb string m(%lld) t(%s) (%s)\n", getTS(), m, t, strerror(errno)); fflush(file); fclose(file);
 #endif
-	    return -1;
-	}
+            return -1;
+        }
 
-	if (n!=nU) {
+        if ( (ic = iconv_init()) == (iconv_t) -1) {
 #ifdef DEBUG
-	    fprintf(file, "%s - s(%s) has utf8 chars n(%lld) nU(%d)\n", getTS(), s, n, nU);
-	    writeDebugHEX(file, "pre", s);
-	    //fprintf(file, "%s - s(%16LX) n(%16LX)\n", getTS(), (uintptr_t)s, (uintptr_t) n); fflush(file);
+            fprintf(file, "%s - iconv_init returned -1\n", getTS()); fflush(file); fclose(file);
 #endif
-	    char * str = utf8toascii(file, ic, s, n);
-	    n = strlen(str);
-	    strncpy(s, str, n);
-#ifdef DEBUG
-	    writeDebugHEX(file, "post", s);
-	    free(str);
-#endif
-	}
-	
-	if (m!=mU) {
-#ifdef DEBUG
-	    fprintf(file, "%s - t(%s) has utf8 chars m(%lld) mU(%d)\n", getTS(), t, m, mU);
-	    writeDebugHEX(file, "pre", t);
-#endif
-	    char * str = utf8toascii(file, ic, t, m);
-	    m = strlen(str);
-	    strncpy(t, str, m);
-#ifdef DEBUG
-	    writeDebugHEX(file, "post", t);
-	    free(str);
-#endif
-	}
+            return -1;
+        }
 
-	iconv_end(ic);
+        if (n!=nU) {
 #ifdef DEBUG
-	fprintf(file, "%s - step.2 n(%lld) s(%s) m(%lld) t(%s) limit_arg(%lld)\n", getTS(), n, s, m, t, limit_arg); fflush(file);
+            fprintf(file, "%s - s(%s) has utf8 chars n(%lld) nU(%d)\n", getTS(), s, n, nU);
+            writeDebugHEX(file, "pre", s);
+            //fprintf(file, "%s - s(%16LX) n(%16LX)\n", getTS(), (uintptr_t)s, (uintptr_t) n); fflush(file);
+#endif
+            char * str = utf8toascii(file, ic, s, n);
+            n = strlen(str);
+            strncpy(s, str, n);
+            s[n] = '\0';
+#ifdef DEBUG
+            writeDebugHEX(file, "post", s);
+            free(str);
+#endif
+        }
+
+        if (m!=mU) {
+#ifdef DEBUG
+            fprintf(file, "%s - t(%s) has utf8 chars m(%lld) mU(%d)\n", getTS(), t, m, mU);
+            writeDebugHEX(file, "pre", t);
+#endif
+            char * str = utf8toascii(file, ic, t, m);
+            m = strlen(str);
+            strncpy(t, str, m);
+            t[m] = '\0';
+#ifdef DEBUG
+            writeDebugHEX(file, "post", t);
+            free(str);
+#endif
+        }
+
+        if (n > 255) {
+            n = 255; s[n] = '\0';
+        }
+
+        if (m > 255) {
+            m = 255; t[m] = '\0';
+        }
+
+        iconv_end(ic);
+#ifdef DEBUG
+        fprintf(file, "%s - step.2 n(%lld) s(%s) m(%lld) t(%s) limit_arg(%lld)\n", getTS(), n, s, m, t, limit_arg); fflush(file);
 #endif
         /************************************************************************
         ** damlevlim256 step two
@@ -424,96 +423,119 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
         /************************************************************************
         ** damlevlim256 step three
         ************************************************************************/
-	
+
         /* throughout these loops, g will be equal to i minus one */
         g = 0;
         for (i = 1; i < n; i++) {
-	    /*********************************************************************
-	    ** damlevlim256 step four
-	    *********************************************************************/
+            /*********************************************************************
+            ** damlevlim256 step four
+            *********************************************************************/
 #ifdef DEBUG
-            fprintf(file, "%s - step.3 i(%d)<n(%lld)\n", getTS(), i, n); fflush(file);
+            //fprintf(file, "%s - step.3 i(%d)<n(%lld)\n", getTS(), i, n); fflush(file);
+#endif
+            k = i;
+
+            /* throughout the for j loop, f will equal j minus one */
+            f = 0;
+            best = limit;
+            for (j = 1; j < m; j++) {
+                /******************************************************************
+                ** damlevlim256 step five, six, seven
+                ******************************************************************/
+#ifdef DEBUG
+                //fprintf(file, "%s - step.4 j(%d)<m(%lld)\n", getTS(), j, m); fflush(file);
 #endif
 
-	    k = i;
+                h = k;
+                k += 256;
 
-	    /* throughout the for j loop, f will equal j minus one */
-	    f = 0;
-	    best = limit;
-	    for (j = 1; j < m; j++) {
-	        /******************************************************************
-	        ** damlevlim256 step five, six, seven
-	        ******************************************************************/
+                min = d[h] + 1;
+                b = d[k-1] + 1;
+                if ( !strncasecmp(&s[g], &t[f], 1) ) { //(s[g] == t[f])
+                    cost = 0;
+                } else {
+                    cost = 1;
+                    /* transposition */
+                    if (i < l1 && j < l2) {
+                        if (strncasecmp(&s[i], &t[f], 1)==0 && //s[i] == t[f] && s[g] == t[j]) -
+                            strncasecmp(&s[g], &t[j], 1)==0) {
+                            tr = d[(h) - 1];
+                            if (tr < min)
+                                min = tr;
+                        }
+                    }
+                }
+                c = d[h - 1] + cost;
+
+                if (b < min)
+                    min = b;
+
+                if (c < min) {
+                    d[k] = c;
+                    if (c < best)
+                        best = c;
+                } else {
+                    d[k] = min;
+                    if (min < best)
+                        best = min;
+                }
+                f = j;
+            }
+
+            if (best >= limit) {
 #ifdef DEBUG
-                fprintf(file, "%s - step.4 j(%d)<m(%lld)\n", getTS(), j, m); fflush(file);
+                fprintf(file, "%s - return.1 limit_arg(%lld)\n", getTS(), limit_arg);
+                fflush(file); fclose(file);
 #endif
+                return limit_arg;
+            }
+            /* g will equal i minus one for the next iteration */
+            g = i;
+        }
 
-	        h = k;
-	        k += 256;
-
-	        min = d[h] + 1;
-	        b = d[k-1] + 1;
-	        if  (!strncasecmp(&s[g], &t[f], 1)) //(s[g] == t[f])
-		    cost = 0;
-		else {
-		    cost = 1;
-		    /* transposition */
-		    if (i < l1 && j < l2)
-		        if (strncasecmp(&s[i], &t[f], 1)==0 && //s[i] == t[f] && s[g] == t[j]) {
-			    strncasecmp(&s[g], &t[j], 1)==0) {
-			    tr = d[(h) - 1];
-			    if (tr < min)
-			        min = tr;
-			}
-		}
-		c = d[h - 1] + cost;
-
-		if (b < min)
-		    min = b;
-
-		if (c < min) {
-		    d[k] = c;
-		    if (c < best)
-			best = c;
-		} else {
-		    d[k] = min;
-		    if (min < best)
-		        best = min;
-		}
-		f = j;
-	    }
-
-	    if (best >= limit) {
+        if (d[k] >= limit) {
 #ifdef DEBUG
-	        fclose(file);
+            fprintf(file, "%s - return.2 limit_arg(%lld)\n", getTS(), limit_arg);
+            fflush(file); fclose(file);
 #endif
-	        return limit_arg;
-	    }
-	        /* g will equal i minus one for the next iteration */
-	    g = i;
-	}
+            return limit_arg;
+        } else {
 #ifdef DEBUG
-	fclose(file);
+            fprintf(file, "%s - return.3 d[k](%lld)\n", getTS(), (longlong) d[k]);
+            fflush(file); fclose(file);
 #endif
-	if (d[k] >= limit)
-	    return limit_arg;
-	else
-	    return (longlong) d[k];
+            return (longlong) d[k];
+        }
     } else {
-#ifdef DEBUG
-	fclose(file);
-#endif
         if (n == 0) {
-	    if (m < limit_arg)
-	        return m;
-	    else
-	        return limit_arg;
-	} else {
-	    if (n < limit_arg)
-	        return n;
-	    else
-	        return limit_arg;
-	}
+            if (m < limit_arg) {
+#ifdef DEBUG
+                fprintf(file, "%s - return.4 m(%lld)\n", getTS(), m);
+                fflush(file); fclose(file);
+#endif
+                return m;
+            } else {
+#ifdef DEBUG
+                fprintf(file, "%s - return.5 limit_arg(%lld)\n", getTS(), limit_arg);
+                fflush(file); fclose(file);
+#endif
+                return limit_arg;
+            }
+        } else {
+            if (n < limit_arg) {
+#ifdef DEBUG
+                fprintf(file, "%s - return.6 n(%lld)\n", getTS(), n);
+                fflush(file); fclose(file);
+#endif
+                return n;
+            } else {
+#ifdef DEBUG
+                fprintf(file, "%s - return.7 limit_arg(%lld)\n", getTS(), limit_arg);
+                fflush(file); fclose(file);
+#endif
+                return limit_arg;
+            }
+        }
     }
 }
 
