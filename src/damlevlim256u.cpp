@@ -312,8 +312,8 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
                      char *error) {
     /* s is the first user-supplied argument; t is the second
     ** the levenshtein distance between s and t is to be computed */
-    /*const*/ char *s = args->args[0]; char *s_c = NULL;
-    /*const*/ char *t = args->args[1]; char *t_c = NULL;
+    /*const*/ char *s = args->args[0]; char *s_c = NULL; char *pre_s = NULL;
+    /*const*/ char *t = args->args[1]; char *t_c = NULL; char *pre_t = NULL;
     long long limit_arg = *((long long*)args->args[2]);
     /* get a pointer to the memory allocated in damlevlim256_init() */
     int *d = (int*) initid->ptr;
@@ -356,16 +356,24 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
             return -1;
         }
 
-        if ( (nU = mbstowcs(NULL,s,0)) == -1 ) { // error
+        pre_s = (char*)calloc(n+2, 1);
+        strncpy(pre_s, s, n);
+        pre_s[n] = '\0'; pre_s[n+1] = '\0';
+
+        pre_t = (char*)calloc(m+2, 1);
+        strncpy(pre_t, t, m);
+        pre_t[m] = '\0'; pre_t[m+1] = '\0';
+
+        if ( (nU = mbstowcs(NULL,pre_s,0)) == -1 ) { // error
 #ifdef DEBUG
-            fprintf(file, "%s - some invalid characters found in mb string n(%lld) s(%s) (%s)\n", getTS(), n, s, strerror(errno)); fflush(file); fclose(file);
+            fprintf(file, "%s - some invalid characters found in mb string n(%lld) pre_s(%s) (%s)\n", getTS(), n, pre_s, strerror(errno)); fflush(file); fclose(file);
 #endif
             return -1;
         }
 
-        if ( (mU = mbstowcs(NULL,t,0)) == -1 ) { // error
+        if ( (mU = mbstowcs(NULL,pre_t,0)) == -1 ) { // error
 #ifdef DEBUG
-            fprintf(file, "%s - some invalid characters found in mb string m(%lld) t(%s) (%s)\n", getTS(), m, t, strerror(errno)); fflush(file); fclose(file);
+            fprintf(file, "%s - some invalid characters found in mb string m(%lld) pre_t(%s) (%s)\n", getTS(), m, pre_t, strerror(errno)); fflush(file); fclose(file);
 #endif
             return -1;
         }
@@ -379,11 +387,11 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 
         if (n!=nU) {
 #ifdef DEBUG
-            fprintf(file, "%s - s(%s) has utf8 chars n(%lld) nU(%d)\n", getTS(), s, n, nU);
-            writeDebugHEX(file, "pre", s);
+            fprintf(file, "%s - pre_s(%s) has utf8 chars n(%lld) nU(%d)\n", getTS(), pre_s, n, nU);
+            writeDebugHEX(file, "pre", pre_s);
             //fprintf(file, "%s - s(%16LX) n(%16LX)\n", getTS(), (uintptr_t)s, (uintptr_t) n); fflush(file);
 #endif
-            if ( (s_c = utf8toascii(file, ic, s, n)) == NULL )
+            if ( (s_c = utf8toascii(file, ic, pre_s, n)) == NULL )
                 return -1;
             n = strlen(s_c);
 //            strncpy(s, str, n);
@@ -394,15 +402,15 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 #endif
         } else {
             s_c = (char*)calloc(n+1, 1);
-            strncpy(s_c, s, n);
+            strncpy(s_c, pre_s, n);
         }
 
         if (m!=mU) {
 #ifdef DEBUG
-            fprintf(file, "%s - t(%s) has utf8 chars m(%lld) mU(%d)\n", getTS(), t, m, mU);
-            writeDebugHEX(file, "pre", t);
+            fprintf(file, "%s - pre_t(%s) has utf8 chars m(%lld) mU(%d)\n", getTS(), pre_t, m, mU);
+            writeDebugHEX(file, "pre", pre_t);
 #endif
-            if ( (t_c = utf8toascii(file, ic, t, m)) == NULL )
+            if ( (t_c = utf8toascii(file, ic, pre_t, m)) == NULL )
                 return -1;
             m = strlen(t_c);
 //            strncpy(t, str, m);
@@ -413,7 +421,7 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 #endif
         } else {
             t_c = (char*)calloc(m+1, 1);
-            strncpy(t_c, t, m);
+            strncpy(t_c, pre_t, m);
         }
 
         if (n > 255) {
@@ -423,6 +431,8 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
         if (m > 255) {
             m = 255; t_c[m] = '\0';
         }
+
+        free(pre_s); free(pre_t);
 
         iconv_end(ic);
 #ifdef DEBUG
@@ -448,7 +458,7 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
             ** damlevlim256 step four
             *********************************************************************/
 #ifdef DEBUG
-            fprintf(file, "%s - step.3 i(%d)<n(%lld)\n", getTS(), i, n); fflush(file);
+            //fprintf(file, "%s - step.3 i(%d)<n(%lld)\n", getTS(), i, n); fflush(file);
 #endif
             k = i;
 
