@@ -104,7 +104,7 @@ Using damlevlim256u
         First string is compared against second string. Compare only the first
         int chars (upper bound).
 
-        mysql> select damlevlim256('coche', 'çóche', 5);
+        mysql> select damlevlim256u('coche', 'çóche', 5);
         +--------------------------------------+
         | damlevlim256u('coche', 'çòche', 5) |
         +--------------------------------------+
