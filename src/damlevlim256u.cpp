@@ -572,28 +572,3 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 }
 
 #endif /* HAVE_DLOPEN */
-
-
-/*
-int main ()
-{
-    //char * in_string = "AáéíóúA";
-    char in_string[] = { 0x62, 0xc3, 0xa1, 0xc3, 0xa7, 0x63, 0x61, 0x4a, 0x6b, 0xc3, 0x87, 0x00 };
-         
-    char * out_string;
-    // Conversion descriptor.
-    iconv_t conv_desc;
-
-setlocale(LC_ALL, "es_ES.UTF-8");
-
-
-    conv_desc = initialize ();
-    out_string = euc2utf8 (conv_desc, in_string);
-    finalize (conv_desc);
-
-    if (out_string) {
-        printf ("Final iconv output: %s\n", out_string);
-    }
-    return 0;
-}
-  */
