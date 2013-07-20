@@ -39,32 +39,8 @@ Derived
 Redistribute as you wish, but leave this information intact.
 */
 
-#ifdef STANDARD
-#include <string.h>
-#ifdef __WIN__
-typedef unsigned __int64 ulonglong;
-typedef __int64 longlong;
-#else
-typedef unsigned long long ulonglong;
-typedef long long longlong;
-#endif /*__WIN__*/
-#else
-#include <my_global.h>
-#include <my_sys.h>
-#endif
-#include <mysql.h>
-#include <m_ctype.h>
-#include <m_string.h>
+#include "damlevlim.h"
 
-#include <locale.h>
-#include <stdio.h>
-#include <string.h>
-#include <wchar.h>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <iconv.h>
-#include <errno.h>
-#include <stdint.h>
 #ifdef HAVE_DLOPEN
 
 //static pthread_mutex_t LOCK;
@@ -73,6 +49,7 @@ typedef long long longlong;
 ** debug function declarations
 ******************************************************************************/
 
+#define OK
 FILE *file = NULL;
 #ifdef DEBUG
 char buf[80];
@@ -113,10 +90,10 @@ void writeDebugHEXSize(FILE *file, const char *pre, const char *s, unsigned int 
 ******************************************************************************/
 
 extern "C" {
-        my_bool         damlevlim256u_init(UDF_INIT *initid, UDF_ARGS *args,
+        my_bool         damlevlim_init(UDF_INIT *initid, UDF_ARGS *args,
                             char *message);
-        void            damlevlim256u_deinit(UDF_INIT *initid);
-        longlong        damlevlim256u(UDF_INIT *initid, UDF_ARGS *args,
+        void            damlevlim_deinit(UDF_INIT *initid);
+        longlong        damlevlim(UDF_INIT *initid, UDF_ARGS *args,
                             char *is_null, char *error);
 }
 
@@ -139,60 +116,275 @@ extern "C" {
 **              can be stored if necessary
 ** returns:     1 => failure; 0 => successful initialization
 ******************************************************************************/
-my_bool damlevlim256u_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
-{
-    int *workspace;
+struct workspace_t {
+    int *matrix;
+    char *str_s;
+    char *str_t;
+    mbstate_t *mbstate;
+    iconv_t ic;
+};
 
-    /* make sure user has provided three arguments */
+#define LENGTH_1 7 // acéhce  len(7) + NULL
+#define LENGTH_2 7 // aceché  len(7) + NULL
+#define LENGTH_LIMIT 7
+#define LENGTH_MAX 256
+
+int main(int argc, char *argv[]) {
+
+    UDF_INIT *initid = new UDF_INIT;
+    UDF_ARGS *args = new UDF_ARGS;
+    args->arg_type = new enum Item_result[3];
+    args->lengths = new long unsigned int[2];
+    char *message = new char[MYSQL_ERRMSG_SIZE];
+    char *error = new char[1];
+    char *is_null = new char[1];
+    long long limit_arg = LENGTH_LIMIT;
+    long long *limit_arg_ptr = &limit_arg;
+
+    args->arg_type[0] = STRING_RESULT;
+    args->arg_type[1] = STRING_RESULT;
+    args->arg_type[2] = INT_RESULT;
+    args->lengths[0] = LENGTH_1;
+    args->lengths[1] = LENGTH_2;
+    args->arg_count = 3;
+    error[0] = '\0';
+    is_null[0] = '\0';
+
+    args->args = new char *[3];
+    args->args[0] = new char[LENGTH_1+2];
+    args->args[1] = new char[LENGTH_2+2];
+    args->args[2] = (char *)limit_arg_ptr;
+
+    strncpy(args->args[0], "ac""\xc3\xa9""cha", LENGTH_1+1);
+    strncpy(args->args[1], "acech""\xc3\xa9", LENGTH_2+1);
+    args->args[0][LENGTH_1] = '\0'; args->args[0][LENGTH_1 + 1] = '\0';
+    args->args[1][LENGTH_2] = '\0'; args->args[1][LENGTH_2 + 1] = '\0';
+
+    printf("ASSERT>cad1(%s) cad2(%s) (%01X) (%01X)\n", args->args[0], args->args[1], (char) error[0], (char) is_null[0]);
+
+    damlevlim_init(initid, args, message);
+
+    longlong ret = damlevlim(initid, args, is_null, error);
+
+    damlevlim_deinit(initid);
+
+    printf("ASSERT>cad1(%s) cad2(%s) ret(%lld)\n", args->args[0], args->args[1], ret);
+
+    delete [] args->args[1];
+    delete [] args->args[0];
+    delete [] args->args;
+    delete [] is_null;
+    delete [] error;
+    delete [] message;
+    delete [] args->arg_type;
+    delete [] args->lengths;
+    delete args;
+    delete initid;
+
+    return 0;
+
+}
+
+/******************************************************************************
+** purpose:     helper that translates and utf8 string to ascii with extended
+**              error codes
+** receives:    iconv_t hander, string to translate and length
+** returns:     ascii translated string
+******************************************************************************/
+char * utf8toascii (const char *str_src, longlong *len_src, iconv_t ic, mbstate_t *mbstate, char *str_dst)
+{
+    size_t len_mbsrtowcs;
+    char *ret = str_dst, *in_s = (char *)str_src; //utf8;
+    size_t retlen = LENGTH_MAX+1;
+
+    //printf("0>%s\n", s);
+
+    memset((void *)mbstate, '\0', sizeof(mbstate_t));
+    if ( (len_mbsrtowcs = mbsrtowcs(NULL, &str_src, 0, mbstate)) == (size_t) -1 ) {
+        //printf("1>%s\n", s);
+        return NULL;
+    }
+
+    //printf("0>%s len(%lld) len_s(%lld)\n", s, (long long) len, *len_s);
+
+    if ( len_mbsrtowcs == *len_src ) {
+        strncpy(str_dst, str_src, LENGTH_MAX+1);
+        //printf("2>%s\n", ws->str_s);
+        return str_dst;
+    }
+
+    if ( iconv(ic, &in_s, (size_t *) len_src, &ret, &retlen) == (size_t) -1 ) {
+        return NULL;
+    }
+
+//    printf("0>s(%s) str_src(%s) len_src(%lld) len_mbsrtowcs(%lld)\n", str_src, str_dst, *len_src, (longlong) len_mbsrtowcs);
+
+
+    *len_src = len_mbsrtowcs; // adjust converted length
+
+    if ( iconv(ic, NULL, NULL, NULL, NULL) == (size_t) -1 ) {
+        return NULL;
+    }
+
+    return str_dst;
+}
+
+
+longlong damlevlim(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error) {
+    // s is the first user-supplied argument; t is the second
+    // the levenshtein distance between s and t is to be computed
+    const char *s = args->args[0], *t = args->args[1];
+    char *ascii_s = NULL, *ascii_t = NULL;
+    long long limit_arg = *((long long*)args->args[2]);
+
+    workspace_t * ws = (workspace_t *) initid->ptr;
+
+    // get a pointer to the memory allocated in damlevlim256_init()
+    int *d = (int*) ws->matrix;
+
+    // longlong nU = -1, mU = -1;
+
+    // int b,c,f,g,h,i,j,k = 0,min, l1, l2, cost, tr, limit = limit_arg, best = 0;
+    // iconv_t ic;
+    // char *ret;
+
+    // damlevlim256 step one
+
+    // if s or t is a NULL pointer, then the argument to which it points
+    // is a MySQL NULL value; when testing a statement like:
+    // >SELECT DAMLEVLIM(NULL, 'test');
+    // the first argument has length zero, but if some row in a table contains
+    // a NULL value which is sent to DAMLEVLIM() (or some other UDF),
+    // that NULL argument has the maximum length of the attribute (as defined
+    // in the CREATE TABLE statement); therefore, the argument length is not
+    // a reliable indicator of the argument's existence... checking for
+    // a NULL pointer is the proper course of action
+
+    longlong n = (s == NULL) ? 0 : args->lengths[0];
+    longlong m = (t == NULL) ? 0 : args->lengths[1];
+
+    if ( m == 0 || n == 0 ) {
+        if ( n == 0 ) {
+            if ( m < limit_arg ) {
+                return m;
+            } else {
+                return limit_arg;
+            }
+        } else {
+            if ( n < limit_arg ) {
+                return n;
+            } else {
+                return limit_arg;
+            }
+        }
+        *error = 1; return -1;
+    }
+
+    printf("BFORE >cad1(%s) lencad1(%lld) cad2(%s) lencad2(%lld)\n", s, n, t, m);
+
+    if ( (ascii_s = utf8toascii(s, &n, ws->ic, ws->mbstate, ws->str_s)) == NULL ) {
+        *error = 1; return -1;
+    }
+    if ( (ascii_t = utf8toascii(t, &m, ws->ic, ws->mbstate, ws->str_t)) == NULL ) {
+        *error = 1; return -1;
+    }
+    // ERROR#001
+    printf("READY >cad1(%s) lencad1(%lld) cad2(%s) lencad2(%lld)\n", ascii_s, n, ascii_t, m);
+
+    return 0;
+
+}
+
+
+my_bool damlevlim_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+
+    char *locale_ret;
+    struct workspace_t *ws;
+
+    // make sure user has provided three arguments 
     if (args->arg_count != 3) {
-        strcpy(message, "DAMLEVLIM() requires three arguments");
+        strncpy(message, "DAMLEVLIM() requires three arguments", 80);
         return 1;
     } else {
-    /* make sure both arguments are strings - they could be cast to strings,
-    ** but that doesn't seem useful right now */
-        if (args->arg_type[0] != STRING_RESULT ||
+        // make sure both arguments are strings
+        if ( args->arg_type[0] != STRING_RESULT ||
             args->arg_type[1] != STRING_RESULT ||
-            args->arg_type[2] != INT_RESULT) {
-            strcpy(message, "DAMLEVLIM() requires arguments (string, string, int)");
+            args->arg_type[2] != INT_RESULT ) {
+            strncpy(message, "DAMLEVLIM() requires arguments (string, string, int)", 80);
             return 1;
         }
     }
 
-    /* set the maximum number of digits MySQL should expect as the return
-    ** value of the DAMLEVLIM() function */
-    initid->max_length = 3;
+    // set the maximum number of digits MySQL should expect as the return
+    // value of the DAMLEVLIM() function
+    //initid->max_length = 21;
 
-    /* damlevlim256() will not be returning null */
+    // DAMLEVLIM() will not be returning null
     initid->maybe_null = 0;
 
-    /* attempt to allocate memory in which to calculate distance */
-    // workspace = new int[(args->lengths[0] + 1) * (args->lengths[1] + 1)];
-    workspace = new int[256 * 256];
+    // attempt to allocate memory in which to calculate distance 
+    ws = new workspace_t;
+    ws->matrix = new int[LENGTH_MAX*LENGTH_MAX];
+    ws->str_s = new char[LENGTH_MAX+1]; // max allocated for UTF-8 complex string
+    ws->str_t = new char[LENGTH_MAX+1];
+    ws->mbstate = new mbstate_t;
 
-    if (workspace == NULL) {
-        strcpy(message, "Failed to allocate memory for damlevlim256 function");
+    if ( ws == NULL ) {
+        strncpy(message, "DAMLEVLIM() failed to allocate memory", 80);
+        return 1;
+    }
+    if ( ws->matrix == NULL ) {
+        delete ws;
+        strncpy(message, "DAMLEVLIM() failed to allocate memory", 80);
+        return 1;
+    }
+    if ( ws->str_s == NULL ) {
+        delete [] ws->matrix;
+        delete ws;
+        strncpy(message, "DAMLEVLIM() failed to allocate memory", 80);
+        return 1;
+    }
+    if ( ws->str_t == NULL ) {
+        delete [] ws->str_s;
+        delete [] ws->matrix;
+        delete ws;
+        strncpy(message, "DAMLEVLIM() failed to allocate memory", 80);
         return 1;
     }
 
-    /* initialize first row to 0..n */
-    int k;
-    for (k = 0; k < 256; k++)
-        workspace[k] = k;
-
-    /* initialize first column to 0..m */
-    k = 256;
-    for (int i = 1; i < 256; i++) {
-        workspace[k] = i;
-        k += 256;
+    if ( (locale_ret = setlocale(LC_ALL, "es_ES.UTF-8")) == NULL ) {
+        strncpy(message, "DAMLEVLIM() failed to change locale", 80);
+        return 1;
     }
-    /* initid->ptr is a char* which MySQL provides to share allocated memory
-    ** among the xxx_init(), xxx_deinit(), and xxx() functions */
-    initid->ptr = (char*) workspace;
 
-//    (void) pthread_mutex_init(&LOCK,MY_MUTEX_INIT_SLOW);
+    if ( (ws->ic = iconv_open("ascii//TRANSLIT", "UTF-8")) == (iconv_t) -1 ) {
+        strncpy(message, "DAMLEVLIM() failed to initialize iconv", 80);
+        return 1;
+    }
 
+    // ERROR#01
+    memset((void *)ws->str_s, '\0', LENGTH_MAX+1);
+    memset((void *)ws->str_t, '\0', LENGTH_MAX+1);
+
+    // initialize first row to 0..n
+    for ( int k = 0; k < LENGTH_MAX; k++ ) {
+        ws->matrix[k] = k;
+    }
+
+    // initialize first column to 0..m
+    for ( int i = 1, k = LENGTH_MAX; i < LENGTH_MAX; i++ ) {
+        ws->matrix[k] = i;
+        k += LENGTH_MAX;
+    }
+
+    initid->ptr = (char *) ws;
+
+    // (void) pthread_mutex_init(&LOCK,MY_MUTEX_INIT_SLOW);
     return 0;
 }
+
+
 
 /******************************************************************************
 ** purpose:     deallocate memory allocated by damlevlim256_init(); this func
@@ -202,101 +394,22 @@ my_bool damlevlim256u_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 **              damlevlim256_init() and damlevlim256())
 ** returns:     nothing
 ******************************************************************************/
-void damlevlim256u_deinit(UDF_INIT *initid)
+void damlevlim_deinit(UDF_INIT *initid)
 {
-    if (initid->ptr != NULL)
-        delete [] initid->ptr;
+    if (initid->ptr != NULL) {
+        workspace_t * ws = (workspace_t *) initid->ptr;
+        iconv_close(ws->ic);
+        delete ws->mbstate;
+        delete [] ws->str_t;
+        delete [] ws->str_s;
+        delete [] ws->matrix;
+        delete ws;
+    }
 
 //    (void) pthread_mutex_destroy(&LOCK);
 }
 
-/******************************************************************************
-** purpose:     initialize iconv library
-** receives:    nothing
-** returns:     iconv_t handler or -1 if error
-******************************************************************************/
-
-iconv_t iconv_init() {
-    iconv_t ic;
-    ic = iconv_open("ascii//TRANSLIT", "UTF-8");
-#ifdef DEBUG
-    if (ic == (iconv_t) -1) {
-        fprintf(file, "%s - Initialization failure: %s\n", getTS(), strerror(errno)); fflush(file);
-        //if (errno == EINVAL)
-        //    fprintf(file, "Conversion from '%s' to '%s' is not supported.\n", "UTF-8", "ascii//TRANSLITE");
-    }
-#endif
-    return ic;
-}
-
-/******************************************************************************
-** purpose:     close iconv library
-** receives:    iconv_t handler
-** returns:     true if success, else false
-******************************************************************************/
-
-bool iconv_end(iconv_t ic) {
-    int rc = iconv_close(ic);
-    if ( rc != 0) {
-#ifdef DEBUG
-        fprintf(file, "%s - iconv_close failed: %s\n", getTS(), strerror(errno)); fflush(file);
-#endif
-        return false;
-    }
-    return true;
-}
-
-
-/******************************************************************************
-** purpose:     helper that translates and utf8 string to ascii with extended
-**              error codes
-** receives:    FILE handler, iconv_t hander, string to translate and length
-** returns:     ascii translated string
-******************************************************************************/
-
-char * utf8toascii (FILE *file, iconv_t ic, char *s, int l) { //euc)
-    size_t iconv_value;
-    char *buffer, *ret; //utf8;
-    size_t len = l;
-    size_t retlen = 2*l;
-
-    ret = (char*)calloc (retlen,1);
-    buffer = ret;
-
-    //fprintf(file, "%s - s(%08X) len(%08X) ret(%08X) retlen(%08X)\n", getTS(),
-    //  (unsigned int) s, (unsigned int) len, (unsigned int) ret, (unsigned int) retlen);
-    //  fflush(file);
-
-    iconv_value = iconv(ic, &s, &len, &ret, &retlen);
-    /* Handle failures. */
-    if ( iconv_value == (size_t) -1 ) {
-#ifdef DEBUG
-        switch (errno) {
-            // See "man 3 iconv" for an explanation. 
-            case EILSEQ:
-                fprintf(file, "%s - Invalid multibyte sequence.(%s)\n", getTS(), s);
-                break;
-            case EINVAL:
-                fprintf(file, "%s - Incomplete multibyte sequence.(%s)\n", getTS(), s);
-                break;
-            case E2BIG:
-                fprintf(file, "%s - No more room.\n", getTS());
-                break;
-            default:
-                fprintf(file, "%s - iconv failed: %s\n", getTS(), strerror(errno));
-        }
-        fflush(file);
-#endif
-        return NULL;
-    }
-#ifdef DEBUG
-    fprintf(file, "%s - inside iconv_value(%zd) retlen(%zd)\n", getTS(), iconv_value, retlen);
-    writeDebugHEXSize(file, "inside", buffer, retlen);
-#endif
-    return buffer;
-}
-
-
+#ifdef OLD
 /******************************************************************************
 ** purpose:     compute the Levenshtein distance (edit distance) between two
 **              strings
@@ -310,32 +423,30 @@ char * utf8toascii (FILE *file, iconv_t ic, char *s, int l) { //euc)
 ******************************************************************************/
 longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
                      char *error) {
-    /* s is the first user-supplied argument; t is the second
-    ** the levenshtein distance between s and t is to be computed */
-    /*const*/ char *s = args->args[0]; char *s_c = NULL; char *pre_s = NULL;
-    /*const*/ char *t = args->args[1]; char *t_c = NULL; char *pre_t = NULL;
+    // s is the first user-supplied argument; t is the second
+    // the levenshtein distance between s and t is to be computed 
+    char *s = args->args[0]; char *s_c = NULL; char *pre_s = NULL;
+    char *t = args->args[1]; char *t_c = NULL; char *pre_t = NULL;
     long long limit_arg = *((long long*)args->args[2]);
-    /* get a pointer to the memory allocated in damlevlim256_init() */
+    // get a pointer to the memory allocated in damlevlim256_init() 
     int *d = (int*) initid->ptr;
     longlong n, m;
     int b,c,f,g,h,i,j,k = 0,min, l1, l2, cost, tr, limit = limit_arg, best = 0;
     iconv_t ic;
     char *ret;
 
-    /***************************************************************************
-    ** damlevlim256 step one
-    ***************************************************************************/
+    // damlevlim256 step one
 
-    /* if s or t is a NULL pointer, then the argument to which it points
-    ** is a MySQL NULL value; when testing a statement like:
-    ** >SELECT DAMLEVLIM(NULL, 'test');
-    ** the first argument has length zero, but if some row in a table contains
-    ** a NULL value which is sent to DAMLEVLIM() (or some other UDF),
-    ** that NULL argument has the maximum length of the attribute (as defined
-    ** in the CREATE TABLE statement); therefore, the argument length is not
-    ** a reliable indicator of the argument's existence... checking for
-    ** a NULL pointer is the proper course of action
-    */
+    // if s or t is a NULL pointer, then the argument to which it points
+    // is a MySQL NULL value; when testing a statement like:
+    // >SELECT DAMLEVLIM(NULL, 'test');
+    // the first argument has length zero, but if some row in a table contains
+    // a NULL value which is sent to DAMLEVLIM() (or some other UDF),
+    // that NULL argument has the maximum length of the attribute (as defined
+    // in the CREATE TABLE statement); therefore, the argument length is not
+    // a reliable indicator of the argument's existence... checking for
+    // a NULL pointer is the proper course of action
+    //
 
     n = (s == NULL) ? 0 : args->lengths[0];
     m = (t == NULL) ? 0 : args->lengths[1];
@@ -391,7 +502,7 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
             writeDebugHEX(file, "pre", pre_s);
             //fprintf(file, "%s - s(%16LX) n(%16LX)\n", getTS(), (uintptr_t)s, (uintptr_t) n); fflush(file);
 #endif
-            if ( (s_c = utf8toascii(file, ic, pre_s, n)) == NULL )
+            if ( (s_c/* = utf8toascii(file, ic, pre_s, n))*/ == NULL) )
                 return -1;
             n = strlen(s_c);
 //            strncpy(s, str, n);
@@ -410,7 +521,7 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
             fprintf(file, "%s - pre_t(%s) has utf8 chars m(%lld) mU(%d)\n", getTS(), pre_t, m, mU);
             writeDebugHEX(file, "pre", pre_t);
 #endif
-            if ( (t_c = utf8toascii(file, ic, pre_t, m)) == NULL )
+            if ( (t_c/* = utf8toascii(file, ic, pre_t, m)) */== NULL) )
                 return -1;
             m = strlen(t_c);
 //            strncpy(t, str, m);
@@ -438,37 +549,29 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 #ifdef DEBUG
         fprintf(file, "%s - step.2 n(%lld) s(%s) m(%lld) t(%s) limit_arg(%lld)\n", getTS(), n, s_c, m, t_c, limit_arg); fflush(file);
 #endif
-        /************************************************************************
-        ** damlevlim256 step two
-        ************************************************************************/
+        // damlevlim256 step two
 
         l1 = n;
         l2 = m;
         n++;
         m++;
 
-        /************************************************************************
-        ** damlevlim256 step three
-        ************************************************************************/
+        // damlevlim256 step three
 
-        /* throughout these loops, g will be equal to i minus one */
+        // throughout these loops, g will be equal to i minus one 
         g = 0;
         for (i = 1; i < n; i++) {
-            /*********************************************************************
-            ** damlevlim256 step four
-            *********************************************************************/
+            // damlevlim256 step four
 #ifdef DEBUG
             //fprintf(file, "%s - step.3 i(%d)<n(%lld)\n", getTS(), i, n); fflush(file);
 #endif
             k = i;
 
-            /* throughout the for j loop, f will equal j minus one */
+            // throughout the for j loop, f will equal j minus one 
             f = 0;
             best = limit;
             for (j = 1; j < m; j++) {
-                /******************************************************************
-                ** damlevlim256 step five, six, seven
-                ******************************************************************/
+                // damlevlim256 step five, six, seven
 #ifdef DEBUG
                 //fprintf(file, "%s - step.4 j(%d)<m(%lld)\n", getTS(), j, m); fflush(file);
 #endif
@@ -517,7 +620,7 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
                 free(s_c); free(t_c);
                 return limit_arg;
             }
-            /* g will equal i minus one for the next iteration */
+            // g will equal i minus one for the next iteration 
             g = i;
         }
 #ifdef DEBUG
@@ -571,4 +674,6 @@ longlong damlevlim256u(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
     }
 }
 
-#endif /* HAVE_DLOPEN */
+#endif // OLD
+
+#endif // HAVE_DLOPEN 
