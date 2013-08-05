@@ -1,42 +1,16 @@
-/* Damerau-Levenshtein Distance UDF for MySQL
+/*
+
+Damerau-Levenshtein Distance UDF for MySQL
 Supports upper bounding for fast searching and UTF-8 case
-insensitive throught iconv
-Updated 20130707
-        by Diego Torres
-        - Added more documentation and some info on errors
-        when compiling cross-platform.
+insensitive throught iconv.
 
-Updated 20120328
-        by Diego Torres <diego dot torres at gmail.com>
-        - Support UTF8 characters, using iconv
-        (http://en.wikipedia.org/wiki/Iconv), and
-        force case-insensitivenes.
-        - Added debuging output to a temporary file
-        - Support for x86_64 and 32bits architecture
-        - Provided make.sh, documentation and examples
+Copyright (C) 2013 Diego Torres <diego dot torres at gmail dot com>
 
-Updated 20090416
-        by Sean Collins <sean at lolyco.com>
-        - Tomas' bug (damlevlim("h","hello",2) i get 4)
-        Adapted from Josh Drew's levenshtein code using pseudo
-        code from
-        http://en.wikipedia.org/wiki/Damerau–Levenshtein_distance
-        - an optimal string alignment algorithm, as opposed to
-        'edit distance' as per the notes in the wp article
-
-Adapted 20080827
-        by Sean Collins <sean at lolyco.com>
-
-Originally 20031228
-        Levenshtein Distance Algorithm implementation as MySQL UDF
-        by Joshua Drew for SpinWeb Net Designs, Inc. on 2003-12-28.
-
-Derived
-        The levenshtein function is derived from the C implementation
-        by Lorenzo Seidenari. More information about the Levenshtein
-        Distance Algorithm can be found at http://www.merriampark.com/ld.htm
+Implementing
+    https://github.com/torvalds/linux/blob/8a72f3820c4d14b27ad5336aed00063a7a7f1bef/tools/perf/util/levenshtein.c
 
 Redistribute as you wish, but leave this information intact.
+
 */
 
 #ifdef STANDARD
@@ -65,4 +39,8 @@ typedef long long longlong;
 #include <iconv.h>
 #include <errno.h>
 #include <stdint.h>
+#include <assert.h>
 
+#ifndef DEBUG
+#define NDEBUG
+#endif

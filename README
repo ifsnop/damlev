@@ -1,47 +1,24 @@
 Damerau-Levenshtein Distance UDF for MySQL
-Supports upper bounding for fast searching and UTF-8 case insensitive
-throught iconv.
+Supports upper bounding for fast searching and UTF-8 case
+insensitive throught iconv.
 
-Updated 20130707
-    by Diego Torres
-    - Added more documentation and some info on errors when compiling
-    cross-platform.
+Copyright (C) 2013 Diego Torres <diego dot torres at gmail dot com>
 
-Updated 20120328
-    by Diego Torres <diego dot torres at gmail.com>
-    - Support UTF8 characters, using iconv
-    (http://en.wikipedia.org/wiki/Iconv), and force case-insensitivenes.
-    - Added debuging output to a temporary file
-    - Support for x86_64 and 32bits architecture
-    - Provided make.sh, documentation and examples
 
-Updated 20090416
-    by Sean Collins <sean at lolyco.com>
-    - Tomas' bug (damlevlim("h","hello",2) i get 4)
-    Adapted from Josh Drew's levenshtein code using pseudo code from
-    http://en.wikipedia.org/wiki/Damerau–Levenshtein_distance
-    - an optimal string alignment algorithm, as opposed to 'edit distance'
-    as per the notes in the wp article
+Implementing
 
-Adapted 20080827
-    by Sean Collins <sean at lolyco.com>
+    https://github.com/torvalds/linux/blob/8a72f3820c4d14b27ad5336aed00063a7a7f1bef/tools/perf/util/levenshtein.c
 
-Originally 20031228
-    Levenshtein Distance Algorithm implementation as MySQL UDF by Joshua
-    Drew for SpinWeb Net Designs, Inc. on 2003-12-28.
-
-Derived
-    The levenshtein function is derived from the C implementation by
-    Lorenzo Seidenari. More information about the Levenshtein Distance
-    Algorithm can be found at http://www.merriampark.com/ld.htm
 
 Redistribute as you wish, but leave this information intact.
 
 Compiling
-    Run make.sh (adjust paths of mysql include files and mysqlclient library)
-    No makefile, neither needed. It will generate both 32 and x86_64
-    versions. There are lots of debug outputs. Enable them by defining the
-    DEBUG symbol.
+
+    Run make. It will try to autodetect architecture and generate
+    32 or x86_64 bit version.
+    Enable testing with "make debug". An executable instead of
+    a library will be built. Execute it to run some tests regarding
+    memory allocation and levenshtein core calculations.
 
     If you get this error when compiling:
 
@@ -59,7 +36,9 @@ http://stackoverflow.com/questions/7412548/gnu-stubs-32-h-no-such-file-or-direct
     - On CentOS 6.3, the package name is glibc-devel.i686.
     - On SLES it's called glibc-devel-32bit - do zypper in glibc-devel-32bit
 
+
 Loading UDFs in MySQL STEP 1
+
     Copy compiled udf to plugin dir. To know where exactly, ask MySQL:
 
     mysql> SHOW VARIABLES LIKE 'plugin_dir';
@@ -72,56 +51,63 @@ Loading UDFs in MySQL STEP 1
 
     Don't forget to restart MySQL!!
 
+
 Loading UDFs in MySQL STEP 2
 
     Bind the library to an UDF inside MySQL (only do it once,
     survives MySQL reboot). Depending your MySQL binaries (32
     or 64 bits), insert the right library.
 
-    mysql> DROP FUNCTION IF EXISTS mysql.damlevlim256u;
+    mysql> DROP FUNCTION IF EXISTS mysql.damlevlim;
 
-    mysql> CREATE FUNCTION damlevlim256u RETURNS INT SONAME 'mysqldamlevlim256u32.so';
+    mysql> CREATE FUNCTION damlevlim RETURNS INT SONAME 'mysqldamlevlim.so';
 
     or
 
-    mysql> CREATE FUNCTION damlevlim256u RETURNS INT SONAME 'mysqldamlevlim256u64.so';
+    mysql> CREATE FUNCTION damlevlim RETURNS INT SONAME 'mysqldamlevlim.so';
 
     Check:
 
     mysql> SELECT * FROM mysql.func;
-    +---------------+-----+-------------------------+----------+
-    | name          | ret | dl                      | type     |
-    +---------------+-----+-------------------------+----------+
-    | damlevlim256u |   2 | mysqldamlevlim256u32.so | function |
-    +---------------+-----+-------------------------+----------+
+    +-----------+-----+-------------------+----------+
+    | name      | ret | dl                | type     |
+    +-----------+-----+-------------------+----------+
+    | damlevlim |   2 | mysqldamlevlim.so | function |
+    +-----------+-----+-------------------+----------+
     1 row in set (0.00 sec)
 
 
-Using damlevlim256u
+Using damlevlim
 
-    mysql> select damlevlim256u();
+    mysql> select damlevlim();
     ERROR: DAMLEVLIM() requires three arguments (string, string, int)
 
     First string is compared against second string. Compare only the first
     int chars (upper bound).
 
-    mysql> select damlevlim256u('coche', 'çóche', 5);
-    +--------------------------------------+
-    | damlevlim256u('coche', 'çòche', 5) |
-    +--------------------------------------+
-    |                                    0 |
-    +--------------------------------------+
+    mysql> select damlevlim('coche', 'çóche', 5);
+    +--------------------------------+
+    | damlevlim('coche', 'çòche', 5) |
+    +--------------------------------+
+    |                              0 |
+    +--------------------------------+
     1 row in set (0.00 sec)
 
+
 Further reading about MySql, UTF8 and charset encoding
+
     http://www.oreillynet.com/onlamp/blog/2006/01/turning_mysql_data_in_latin1_t.html
 
-How to search for multibyte characters in a column:
+
+How to search for multibyte characters in a column
+
     Use MySql CHAR_LENGTH function to find rows with multi-byte characters:
 
     mysql> SELECT name FROM users WHERE LENGTH(name) != CHAR_LENGTH(name);
 
-How to search for strange multibyte characters in a column 
+
+How to search for strange multibyte characters in a column
+
     (don't remember source of original tip)
     Use MySql HEX and PHP bin2hex functions
 
