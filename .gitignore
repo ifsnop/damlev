@@ -1,1 +1,3 @@
 lib/*.so
+bin/*
+!**/.empty
