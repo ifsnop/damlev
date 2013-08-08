@@ -21,15 +21,15 @@ Redistribute as you wish, but leave this information intact.
     do { if (DEBUG_MYSQL) fprintf(stderr, "%s:%d> " fmt "\n", \
          __func__, __LINE__, __VA_ARGS__); fflush(stderr); } while (0)
 
-
+//! structure to allocate memory in init and use it in core functions
 struct workspace_t {
-    char *str1;
-    char *str2;
-    int *row0;
+    char *str1;         //!< internal buffer to store 1st string
+    char *str2;         //!< internal buffer to store 2nd string
+    int *row0;          //!< round buffer for levenshtein_core function
     int *row1;
     int *row2;
-    mbstate_t *mbstate;
-    iconv_t ic;
+    mbstate_t *mbstate; //!< buffer for mbsnrtowcs
+    iconv_t ic;         //!< buffer for iconv
 };
 
 my_bool damlevlim_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
@@ -51,6 +51,7 @@ char * utf8toascii (const char *str_src, longlong *len_src,
 #define LENGTH_2 7 // aceché  len(7) + NULL
 #define LENGTH_LIMIT 7
 
+//! main function, only used in testing
 int main(int argc, char *argv[]) {
 
     UDF_INIT *init = (UDF_INIT *) malloc(sizeof(UDF_INIT));
@@ -83,7 +84,7 @@ int main(int argc, char *argv[]) {
     args->args[0][LENGTH_1] = '\0'; args->args[0][LENGTH_1 + 1] = '\0';
     args->args[1][LENGTH_2] = '\0'; args->args[1][LENGTH_2 + 1] = '\0';
 
-    printf("ASSERT>cad1(%s) cad2(%s) (%01X) (%01X)\n", args->args[0], args->args[1], (char) error[0], (char) is_null[0]);
+    printf("0>cad1(%s) cad2(%s) (%01X) (%01X)\n", args->args[0], args->args[1], (char) error[0], (char) is_null[0]);
 
     damlevlim_init(init, args, message);
 
@@ -91,11 +92,9 @@ int main(int argc, char *argv[]) {
 
     assert(ret == 1);
 
-    //assert(damlevlim(init, args, is_null, error) == 1);
-
     damlevlim_deinit(init);
 
-    printf("ASSERT>cad1(%s) cad2(%s) ret(%lld)\n", args->args[0], args->args[1], ret);
+    printf("1>cad1(%s) cad2(%s) ret(%lld)\n", args->args[0], args->args[1], ret);
 
     free(args->args[1]);
     free(args->args[0]);
