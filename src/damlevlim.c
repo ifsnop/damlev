@@ -23,8 +23,8 @@ Redistribute as you wish, but leave this information intact.
 
 
 struct workspace_t {
-    char *str_s;
-    char *str_t;
+    char *str1;
+    char *str2;
     int *row0;
     int *row1;
     int *row2;
@@ -36,8 +36,8 @@ my_bool damlevlim_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
 void damlevlim_deinit(UDF_INIT *initid);
 longlong damlevlim(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
 int damlevlim_core(struct workspace_t *ws,
-    const char *string1, int len1,
-    const char *string2, int len2,
+    const char *str1, int len1,
+    const char *str2, int len2,
     int w, int s, int a, int d, int limit);
 char * utf8toascii (const char *str_src, longlong *len_src,
     iconv_t ic, mbstate_t *mbstate, char *str_dst);
@@ -83,17 +83,19 @@ int main(int argc, char *argv[]) {
     args->args[0][LENGTH_1] = '\0'; args->args[0][LENGTH_1 + 1] = '\0';
     args->args[1][LENGTH_2] = '\0'; args->args[1][LENGTH_2 + 1] = '\0';
 
-    //printf("ASSERT>cad1(%s) cad2(%s) (%01X) (%01X)\n", args->args[0], args->args[1], (char) error[0], (char) is_null[0]);
+    printf("ASSERT>cad1(%s) cad2(%s) (%01X) (%01X)\n", args->args[0], args->args[1], (char) error[0], (char) is_null[0]);
 
     damlevlim_init(init, args, message);
 
     longlong ret = damlevlim(init, args, is_null, error);
 
+    assert(ret == 1);
+
     //assert(damlevlim(init, args, is_null, error) == 1);
 
     damlevlim_deinit(init);
 
-    //printf("ASSERT>cad1(%s) cad2(%s) ret(%lld)\n", args->args[0], args->args[1], ret);
+    printf("ASSERT>cad1(%s) cad2(%s) ret(%lld)\n", args->args[0], args->args[1], ret);
 
     free(args->args[1]);
     free(args->args[0]);
@@ -140,36 +142,36 @@ my_bool damlevlim_init(UDF_INIT *init, UDF_ARGS *args, char *message) {
     init->maybe_null = 0;
 
     // attempt to allocate memory in which to calculate distance
-    ws = (struct workspace_t *) malloc(sizeof(struct workspace_t));
-    ws->mbstate = (mbstate_t *) malloc(sizeof(mbstate_t));
-    ws->str_s = (char *) malloc(sizeof(char)*(LENGTH_MAX+1)); // max allocated for UTF-8 complex string
-    ws->str_t = (char *) malloc(sizeof(char)*(LENGTH_MAX+1));
-    ws->row0 = (int *) malloc(sizeof(int)*(LENGTH_MAX+1));
-    ws->row1 = (int *) malloc(sizeof(int)*(LENGTH_MAX+1));
-    ws->row2 = (int *) malloc(sizeof(int)*(LENGTH_MAX+1));
+    ws = (struct workspace_t *) malloc( sizeof(struct workspace_t) );
+    ws->mbstate = (mbstate_t *) malloc( sizeof(mbstate_t) );
+    ws->str1 = (char *) malloc( sizeof(char)*(LENGTH_MAX+1) ); // max allocated for UTF-8 complex string
+    ws->str2 = (char *) malloc( sizeof(char)*(LENGTH_MAX+1) );
+    ws->row0 = (int *) malloc( sizeof(int)*(LENGTH_MAX+1) );
+    ws->row1 = (int *) malloc( sizeof(int)*(LENGTH_MAX+1) );
+    ws->row2 = (int *) malloc( sizeof(int)*(LENGTH_MAX+1) );
 
 
     if ( ws == NULL || ws->mbstate == NULL ||
-        ws->str_s == NULL || ws->str_t == NULL ||
+        ws->str1 == NULL || ws->str2 == NULL ||
         ws->row0 == NULL || ws->row1 == NULL || ws->row2 == NULL ) {
-        free(ws->row0); free(ws->row1); free(ws->row2);
-        free(ws->str_t); free(ws->str_s);
+        free(ws->row2); free(ws->row1); free(ws->row0);
+        free(ws->str2); free(ws->str1);
         free(ws->mbstate); free(ws);
         strncpy(message, "DAMLEVLIM() failed to allocate memory", 80);
         return 1;
     }
 
     if ( setlocale(LC_ALL, "es_ES.UTF-8") == NULL ) {
-        free(ws->row0); free(ws->row1); free(ws->row2);
-        free(ws->str_t); free(ws->str_s);
+        free(ws->row2); free(ws->row1); free(ws->row0);
+        free(ws->str2); free(ws->str1);
         free(ws->mbstate); free(ws);
         strncpy(message, "DAMLEVLIM() failed to change locale", 80);
         return 1;
     }
 
     if ( (ws->ic = iconv_open("ascii//TRANSLIT", "UTF-8")) == (iconv_t) -1 ) {
-        free(ws->row0); free(ws->row1); free(ws->row2);
-        free(ws->str_t); free(ws->str_s);
+        free(ws->row2); free(ws->row1); free(ws->row0);
+        free(ws->str2); free(ws->str1);
         free(ws->mbstate); free(ws);
         strncpy(message, "DAMLEVLIM() failed to initialize iconv", 80);
         return 1;
@@ -182,15 +184,15 @@ my_bool damlevlim_init(UDF_INIT *init, UDF_ARGS *args, char *message) {
     return 0;
 }
 
-//! check parameters and allocate memory for MySql
+//! check parameters akkd allocate memory for MySql
 longlong damlevlim(UDF_INIT *init, UDF_ARGS *args, char *is_null, char *error) {
 
     // s is the first user-supplied argument; t is the second
-    const char *s = args->args[0], *t = args->args[1];
+    const char *str1 = args->args[0], *str2 = args->args[1];
     // upper bound for calculations
     long long limit = *((long long*)args->args[2]);
     // clean, ascii version of user supplied utf8 strings
-    char *ascii_s = NULL, *ascii_t = NULL;
+    char *ascii_str1 = NULL, *ascii_str2 = NULL;
 
     // get a pointer to memory previously allocated
     struct workspace_t * ws = (struct workspace_t *) init->ptr;
@@ -199,21 +201,21 @@ longlong damlevlim(UDF_INIT *init, UDF_ARGS *args, char *is_null, char *error) {
         *error = 1; return -1;
     }
 
-    longlong n = (s == NULL) ? 0 : args->lengths[0];
-    longlong m = (t == NULL) ? 0 : args->lengths[1];
+    longlong len1 = (str1 == NULL) ? 0 : args->lengths[0];
+    longlong len2 = (str2 == NULL) ? 0 : args->lengths[1];
 
-    debug_print("BEFORE]cad1(%s) lencad1(%lld) cad2(%s) lencad2(%lld)", s, n, t, m);
+    debug_print("BEFORE]cad1(%s) lencad1(%lld) cad2(%s) lencad2(%lld)", str1, len1, str2, len2);
 
-    if ( m == 0 || n == 0 ) {
-        if ( n == 0 ) {
-            if ( m < limit ) {
-                return m;
+    if ( len1 == 0 || len2 == 0 ) {
+        if ( len1 == 0 ) {
+            if ( len2 < limit ) {
+                return len2;
             } else {
                 return limit;
             }
-        } else if ( m == 0 ) {
-            if ( n < limit ) {
-                return n;
+        } else if ( len2 == 0 ) {
+            if ( len1 < limit ) {
+                return len1;
             } else {
                 return limit;
             }
@@ -222,21 +224,21 @@ longlong damlevlim(UDF_INIT *init, UDF_ARGS *args, char *is_null, char *error) {
         }
     }
 
-    if ( (ascii_s = utf8toascii(s, &n, ws->ic, ws->mbstate, ws->str_s)) == NULL ) {
+    if ( (ascii_str1 = utf8toascii(str1, &len1, ws->ic, ws->mbstate, ws->str1)) == NULL ) {
         *error = 1; return -1;
     }
-    if ( (ascii_t = utf8toascii(t, &m, ws->ic, ws->mbstate, ws->str_t)) == NULL ) {
+    if ( (ascii_str2 = utf8toascii(str2, &len2, ws->ic, ws->mbstate, ws->str2)) == NULL ) {
         *error = 1; return -1;
     }
 
-    debug_print("AFTER]cad1(%s) lencad1(%lld) cad2(%s) lencad2(%lld)", ascii_s, n, ascii_t, m);
+    debug_print("AFTER]cad1(%s) lencad1(%lld) cad2(%s) lencad2(%lld)", ascii_str1, len1, ascii_str2, len2);
 
     debug_print("%s", "about to run levenshtein func");
 
     return damlevlim_core(
         ws,
-        ascii_s, n,
-        ascii_t, m,
+        ascii_str1, len1,
+        ascii_str2, len2,
         /* swap */              1,
         /* substitution */      1,
         /* insertion */         1,
@@ -252,8 +254,8 @@ void damlevlim_deinit(UDF_INIT *init) {
     if (init->ptr != NULL) {
         struct workspace_t * ws = (struct workspace_t *) init->ptr;
         iconv_close(ws->ic);
-        free(ws->row0); free(ws->row1); free(ws->row2);
-        free(ws->str_t); free(ws->str_s);
+        free(ws->row2); free(ws->row1); free(ws->row0);
+        free(ws->str2); free(ws->str1);
         free(ws->mbstate); free(ws);
     }
 
@@ -263,8 +265,8 @@ void damlevlim_deinit(UDF_INIT *init) {
 
 //! core damlevlim_core function
 int damlevlim_core(struct workspace_t *ws,
-    const char *string1, int len1,
-    const char *string2, int len2,
+    const char *str1, int len1,
+    const char *str2, int len2,
     int w, int s, int a, int d, int limit) {
 
     int *row0 = ws->row0; //(int*)malloc(sizeof(int) * (len2 + 1));
@@ -280,10 +282,10 @@ int damlevlim_core(struct workspace_t *ws,
         row2[0] = (i + 1) * d;
         for (j = 0; j < len2; j++) {
             /* substitution */
-            row2[j + 1] = row1[j] + s * (string1[i] != string2[j]);
+            row2[j + 1] = row1[j] + s * (str1[i] != str2[j]);
             /* swap */
-            if (i > 0 && j > 0 && string1[i - 1] == string2[j] &&
-                string1[i] == string2[j - 1] &&
+            if (i > 0 && j > 0 && str1[i - 1] == str2[j] &&
+                str1[i] == str2[j - 1] &&
                 row2[j + 1] > row0[j - 1] + w) {
                 row2[j + 1] = row0[j - 1] + w;
             }
