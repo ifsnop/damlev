@@ -58,15 +58,11 @@ Loading UDFs in MySQL STEP 2
     survives MySQL reboot). Depending your MySQL binaries (32
     or 64 bits), insert the right library.
 
-    mysql> DROP FUNCTION IF EXISTS mysql.damlevlim;
+    mysql> DROP FUNCTION IF EXISTS damlevlim;
 
     mysql> CREATE FUNCTION damlevlim RETURNS INT SONAME 'mysqldamlevlim.so';
 
-    or
-
-    mysql> CREATE FUNCTION damlevlim RETURNS INT SONAME 'mysqldamlevlim.so';
-
-    Check:
+    Check if UDF was loaded OK.
 
     mysql> SELECT * FROM mysql.func;
     +-----------+-----+-------------------+----------+
