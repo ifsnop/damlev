@@ -160,7 +160,7 @@ my_bool damlevlim_init(UDF_INIT *init, UDF_ARGS *args, char *message) {
         return 1;
     }
 
-    if ( setlocale(LC_ALL, "es_ES.UTF-8") == NULL ) {
+    if ( setlocale(LC_ALL, "C.UTF-8") == NULL ) {
         free(ws->row2); free(ws->row1); free(ws->row0);
         free(ws->str2); free(ws->str1);
         free(ws->mbstate); free(ws);
