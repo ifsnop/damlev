@@ -30,6 +30,7 @@ struct workspace_t {
     int *row2;
     mbstate_t *mbstate; //!< buffer for mbsnrtowcs
     iconv_t ic;         //!< buffer for iconv
+    char iconv_init;
 };
 
 my_bool damlevlim_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
@@ -40,7 +41,7 @@ int damlevlim_core(struct workspace_t *ws,
     const char *str2, int len2,
     int w, int s, int a, int d, int limit);
 char * utf8toascii (const char *str_src, longlong *len_src,
-    iconv_t ic, mbstate_t *mbstate, char *str_dst);
+    struct workspace_t * ws, char *str_dst);
 
 #ifdef HAVE_DLOPEN
 
@@ -148,7 +149,7 @@ my_bool damlevlim_init(UDF_INIT *init, UDF_ARGS *args, char *message) {
     ws->row0 = (int *) malloc( sizeof(int)*(LENGTH_MAX+1) );
     ws->row1 = (int *) malloc( sizeof(int)*(LENGTH_MAX+1) );
     ws->row2 = (int *) malloc( sizeof(int)*(LENGTH_MAX+1) );
-
+    ws->iconv_init = 0;
 
     if ( ws == NULL || ws->mbstate == NULL ||
         ws->str1 == NULL || ws->str2 == NULL ||
@@ -160,19 +161,11 @@ my_bool damlevlim_init(UDF_INIT *init, UDF_ARGS *args, char *message) {
         return 1;
     }
 
-    if ( setlocale(LC_ALL, "es_ES.UTF-8") == NULL ) {
+    if ( setlocale(LC_CTYPE, "C.UTF-8") == NULL ) {
         free(ws->row2); free(ws->row1); free(ws->row0);
         free(ws->str2); free(ws->str1);
         free(ws->mbstate); free(ws);
         strncpy(message, "DAMLEVLIM() failed to change locale", 80);
-        return 1;
-    }
-
-    if ( (ws->ic = iconv_open("ascii//TRANSLIT", "UTF-8")) == (iconv_t) -1 ) {
-        free(ws->row2); free(ws->row1); free(ws->row0);
-        free(ws->str2); free(ws->str1);
-        free(ws->mbstate); free(ws);
-        strncpy(message, "DAMLEVLIM() failed to initialize iconv", 80);
         return 1;
     }
 
@@ -203,8 +196,6 @@ longlong damlevlim(UDF_INIT *init, UDF_ARGS *args, char *is_null, char *error) {
     longlong len1 = (str1 == NULL) ? 0 : args->lengths[0];
     longlong len2 = (str2 == NULL) ? 0 : args->lengths[1];
 
-    debug_print("BEFORE]cad1(%s) lencad1(%lld) cad2(%s) lencad2(%lld)", str1, len1, str2, len2);
-
     if ( len1 == 0 || len2 == 0 ) {
         if ( len1 == 0 ) {
             if ( len2 < limit ) {
@@ -223,16 +214,16 @@ longlong damlevlim(UDF_INIT *init, UDF_ARGS *args, char *is_null, char *error) {
         }
     }
 
-    if ( (ascii_str1 = utf8toascii(str1, &len1, ws->ic, ws->mbstate, ws->str1)) == NULL ) {
+    debug_print("before utf8 conversion]str1(%s) len1(%lld) str2(%s) len2(%lld)", str1, len1, str2, len2);
+
+    if ( (ascii_str1 = utf8toascii(str1, &len1, ws, ws->str1)) == NULL ) {
         *error = 1; return -1;
     }
-    if ( (ascii_str2 = utf8toascii(str2, &len2, ws->ic, ws->mbstate, ws->str2)) == NULL ) {
+    if ( (ascii_str2 = utf8toascii(str2, &len2, ws, ws->str2)) == NULL ) {
         *error = 1; return -1;
     }
 
-    debug_print("AFTER]cad1(%s) lencad1(%lld) cad2(%s) lencad2(%lld)", ascii_str1, len1, ascii_str2, len2);
-
-    debug_print("%s", "about to run levenshtein func");
+    debug_print("after ut8 conversion]str1(%s) len1(%lld) str2(%s) len2(%lld)", ascii_str1, len1, ascii_str2, len2);
 
     return damlevlim_core(
         ws,
@@ -244,7 +235,6 @@ longlong damlevlim(UDF_INIT *init, UDF_ARGS *args, char *is_null, char *error) {
         /* deletion */          1,
         /* limit */             limit
     );
-
 }
 
 //! deallocate memory, clean and close
@@ -252,13 +242,14 @@ void damlevlim_deinit(UDF_INIT *init) {
 
     if (init->ptr != NULL) {
         struct workspace_t * ws = (struct workspace_t *) init->ptr;
-        iconv_close(ws->ic);
+        if (ws->iconv_init ==1)
+            iconv_close(ws->ic);
         free(ws->row2); free(ws->row1); free(ws->row0);
         free(ws->str2); free(ws->str1);
         free(ws->mbstate); free(ws);
     }
 
-    debug_print("%s", "deinit successful");
+    debug_print("%s", "bye");
     // (void) pthread_mutex_destroy(&LOCK);
 }
 
@@ -268,6 +259,8 @@ int damlevlim_core(struct workspace_t *ws,
     const char *str2, int len2,
     int w, int s, int a, int d, int limit) {
 
+    debug_print("%s", "in damlevlim_core");
+
     int *row0 = ws->row0; //(int*)malloc(sizeof(int) * (len2 + 1));
     int *row1 = ws->row1; //(int*)malloc(sizeof(int) * (len2 + 1));
     int *row2 = ws->row2; //(int*)malloc(sizeof(int) * (len2 + 1));
@@ -275,6 +268,7 @@ int damlevlim_core(struct workspace_t *ws,
 
     for (j = 0; j <= len2; j++)
         row1[j] = j * a;
+
     for (i = 0; i < len1; i++) {
         int *dummy;
 
@@ -303,17 +297,24 @@ int damlevlim_core(struct workspace_t *ws,
         row1 = row2;
         row2 = dummy;
 
-        if (row1[len2] >= limit)
+        if (row1[len2] >= limit) {
+            debug_print("limit(%d) hit, returning(%d)", limit, row1[len2]);
             return row1[len2];
+        }
     }
+
+    debug_print("returning(%d)", row1[len2]);
 
     return row1[len2];
 }
 
 //! helper that translates an utf8 string to ascii with some error return codes
+//char * utf8toascii(const char *str_src, longlong *len_src,
+//    iconv_t ic, mbstate_t *mbstate, char *str_dst) {
 char * utf8toascii(const char *str_src, longlong *len_src,
-    iconv_t ic, mbstate_t *mbstate, char *str_dst) {
+    struct workspace_t * ws, char *str_dst) {
 
+    mbstate_t *mbstate = ws->mbstate;
     size_t len_mbsrtowcs;
     char *ret = str_dst, *in_s = (char *)str_src; //utf8;
     size_t retlen = LENGTH_MAX+1;
@@ -326,22 +327,30 @@ char * utf8toascii(const char *str_src, longlong *len_src,
 
     if ( len_mbsrtowcs == *len_src ) {
         strncpy(str_dst, str_src, len_mbsrtowcs);
-        //printf("2>%s\n", ws->str_s);
         str_dst[len_mbsrtowcs] = '\0';
-        str_dst[len_mbsrtowcs + 1] = '\0';
+        str_dst[len_mbsrtowcs + 1] = '\0'; // NULLNULL is proper string ending when parsing utf8
         return str_dst;
     }
 
-    if ( iconv(ic, &in_s, (size_t *) len_src, &ret, &retlen) == (size_t) -1 ) {
+    if ( ws->iconv_init == 0 ) {
+        if ( (ws->ic = iconv_open("ascii//TRANSLIT", "UTF-8")) == (iconv_t) -1 ) {
+            debug_print("%s", "failed to initialize iconv");
+            return NULL;
+        }
+        ws->iconv_init = 1;
+    }
+
+    if ( iconv(ws->ic, &in_s, (size_t *) len_src, &ret, &retlen) == (size_t) -1 ) {
         debug_print("str_src(%s): %s", str_src, strerror(errno));
         return NULL;
     }
 
     *len_src = len_mbsrtowcs; // adjust converted length
     str_dst[len_mbsrtowcs] = '\0';
-    str_dst[len_mbsrtowcs + 1] = '\0';
+    str_dst[len_mbsrtowcs + 1] = '\0'; // NULLNULL is proper string ending when parsing utf8
 
-    if ( iconv(ic, NULL, NULL, NULL, NULL) == (size_t) -1 ) {
+    if ( iconv(ws->ic, NULL, NULL, NULL, NULL) == (size_t) -1 ) {
+        // iconv house cleaning should not fail, but...
         return NULL;
     }
 
