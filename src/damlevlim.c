@@ -18,8 +18,10 @@ Redistribute as you wish, but leave this information intact.
 #define LENGTH_MAX 255
 
 #define debug_print(fmt, ...) \
-    do { if (DEBUG_MYSQL) fprintf(stderr, "%s:%d> " fmt "\n", \
+    do { if (DEBUG_MYSQL) fprintf(stderr, "%s():%d> " fmt "\n", \
          __func__, __LINE__, __VA_ARGS__); fflush(stderr); } while (0)
+
+#define MIN(a,b) (((a)<(b))?(a):(b))
 
 //! structure to allocate memory in init and use it in core functions
 struct workspace_t {
@@ -41,16 +43,16 @@ int damlevlim_core(struct workspace_t *ws,
     const char *str2, int len2,
     int w, int s, int a, int d, int limit);
 char * utf8toascii (const char *str_src, longlong *len_src,
-    struct workspace_t * ws, char *str_dst);
+    struct workspace_t * ws, char *str_dst, int limit);
 
 #ifdef HAVE_DLOPEN
 
 //static pthread_mutex_t LOCK;
 
 #ifdef DEBUG
-#define LENGTH_1 7 // acéhce  len(7) + NULL
-#define LENGTH_2 576 // aceché  len(7) + NULL
-#define LENGTH_LIMIT 25
+#define LENGTH_1 16 // acéhce  len(7) + NULL
+#define LENGTH_2 506 // aceché  len(7) + NULL
+#define LENGTH_LIMIT 10
 
 //! main function, only used in testing
 int main(int argc, char *argv[]) {
@@ -80,9 +82,11 @@ int main(int argc, char *argv[]) {
     args->args[1] = (char *) malloc(sizeof(char)*(LENGTH_2+2));
     args->args[2] = (char *) limit_arg_ptr;
 
-    strncpy(args->args[0], "ac""\xc3\xa9""cha", LENGTH_1+1);
+    //strncpy(args->args[0], "ac""\xc3\xa9""cha", LENGTH_1+1);
     //strncpy(args->args[1], "acech""\xc3\xa9", LENGTH_2+1);
-    strncpy(args->args[1],"aaaaaaaaaaaaaaaaaaacechaaaaaaaaaaaaaaaaaaaa""\xc3\xa9""aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", LENGTH_2+1);
+    strncpy(args->args[1],"aaaaaaaa""\xc3\xa9""aaaaaaaaaaacechaaaaaaaaaaaaaaaaaaaasdfsdfdsfsdfdsfaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa32424234dsfsdssdsaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", LENGTH_2+1);
+    strncpy(args->args[0], "abcdefghijklmnopqrstuvwxyz", LENGTH_1+1);
+    //strncpy(args->args[1], "abcdef", LENGTH_2+1);
 
     args->args[0][LENGTH_1] = '\0'; args->args[0][LENGTH_1 + 1] = '\0';
     args->args[1][LENGTH_2] = '\0'; args->args[1][LENGTH_2 + 1] = '\0';
@@ -190,8 +194,8 @@ longlong damlevlim(UDF_INIT *init, UDF_ARGS *args, char *is_null, char *error) {
     // get a pointer to memory previously allocated
     struct workspace_t * ws = (struct workspace_t *) init->ptr;
 
-    if (limit >= LENGTH_MAX) {
-        debug_print("parameter limit(%lld) was bigger than compile time constante LENGTH_MAX(%d)", limit, LENGTH_MAX);
+    if ( limit >= LENGTH_MAX || limit <=0 ) {
+        debug_print("parameter limit(%lld) was bigger than compile time constante LENGTH_MAX(%d), or zero or negative", limit, LENGTH_MAX);
         *error = 1; return -1;
     }
 
@@ -219,10 +223,10 @@ longlong damlevlim(UDF_INIT *init, UDF_ARGS *args, char *is_null, char *error) {
 
     debug_print("before utf8 conversion]str1(%s) len1(%lld) str2(%s) len2(%lld)", str1, len1, str2, len2);
 
-    if ( (ascii_str1 = utf8toascii(str1, &len1, ws, ws->str1)) == NULL ) {
+    if ( (ascii_str1 = utf8toascii(str1, &len1, ws, ws->str1, limit)) == NULL ) {
         *error = 1; return -1;
     }
-    if ( (ascii_str2 = utf8toascii(str2, &len2, ws, ws->str2)) == NULL ) {
+    if ( (ascii_str2 = utf8toascii(str2, &len2, ws, ws->str2, limit)) == NULL ) {
         *error = 1; return -1;
     }
 
@@ -262,7 +266,7 @@ int damlevlim_core(struct workspace_t *ws,
     const char *str2, int len2,
     int w, int s, int a, int d, int limit) {
 
-    debug_print("%s", "in damlevlim_core");
+//    debug_print("%s", "in damlevlim_core");
 
     int *row0 = ws->row0; //(int*)malloc(sizeof(int) * (len2 + 1));
     int *row1 = ws->row1; //(int*)malloc(sizeof(int) * (len2 + 1));
@@ -276,6 +280,12 @@ int damlevlim_core(struct workspace_t *ws,
         int *dummy;
 
         row2[0] = (i + 1) * d;
+/*
+        debug_print("%s", "=======================");
+        for(j=0; j<len1; j++) {
+            debug_print("%d %d %d", row0[j], row1[j], row2[j]);
+        }
+*/
         for (j = 0; j < len2; j++) {
             /* substitution */
             row2[j + 1] = row1[j] + s * (str1[i] != str2[j]);
@@ -299,43 +309,61 @@ int damlevlim_core(struct workspace_t *ws,
         row0 = row1;
         row1 = row2;
         row2 = dummy;
-
+/*
         if (row1[len2] >= limit) {
-            debug_print("limit(%d) hit, returning(%d)", limit, limit); //row1[len2]);
+            debug_print("limit(%d) hit, row1(len2)(%d) i(%d) j(%d) returning(%d)", limit, row1[len2], i, j, limit); //row1[len2]);
+            for(j=0; j<len1; j++) {
+                debug_print("%d %d %d", row2[j], row0[j], row1[j]);
+            }
+
             return limit; //row1[len2];
         }
+*/
     }
 
     debug_print("returning(%d)", row1[len2]);
-
+/*    for(j=0; j<i; j++) {
+        debug_print("%d %d %d", row2[j], row0[j], row1[j]);
+    }
+*/
     return row1[len2];
 }
 
 //! helper that translates an utf8 string to ascii with some error return codes
 char * utf8toascii(const char *str_src, longlong *len_src,
-    struct workspace_t * ws, char *str_dst) {
+    struct workspace_t * ws, char *str_dst, int limit) {
 
     mbstate_t *mbstate = ws->mbstate;
-    size_t len_mbsrtowcs, len_ret = LENGTH_MAX, len_min;
+    size_t len_mbsnrtowcs, len_ret = LENGTH_MAX, len_min = LENGTH_MAX;
     char *ret = str_dst, *in_s = (char *)str_src; //utf8;
 
     memset((void *)mbstate, '\0', sizeof(mbstate_t));
-    if ( (len_mbsrtowcs = mbsnrtowcs(NULL, &str_src, *len_src, 0, mbstate)) == (size_t) -1 ) {
+    if ( (len_mbsnrtowcs = mbsnrtowcs(NULL, &str_src, *len_src, 0, mbstate)) == (size_t) -1 ) {
         debug_print("str_src(%s): %s", str_src, strerror(errno));
         return NULL;
     }
 
-    if (len_mbsrtowcs < LENGTH_MAX)
+    //debug_print("0] len_mbsrtowcs(%lld) limit(%d) LENGTH_MAX(%d) min(%d)", (long long int) len_mbsrtowcs, limit, LENGTH_MAX, len_min);
+
+    //len_min = MIN(len_mbsrtowcs, MIN(limit,LENGTH_MAX));
+
+    len_min = MIN(len_mbsnrtowcs, limit);
+
+    debug_print("1] len_mbsnrtowcs(%lld) limit(%d) LENGTH_MAX(%d) min(%d)", (long long int) len_mbsnrtowcs, limit, LENGTH_MAX, len_min);
+
+/*    if (len_mbsrtowcs < LENGTH_MAX)
         len_min = len_mbsrtowcs;
     else
         len_min = LENGTH_MAX;
+*/
+    //*len_src = len_min;
 
-    debug_print("len_mbsrtowcs(%d) len_src(%ld) LENGTH_MAX(%d) len_min(%d)", len_mbsrtowcs, (long int) *len_src, LENGTH_MAX, len_min);
-    if ( len_mbsrtowcs == *len_src ) {
+    if ( len_mbsnrtowcs == *len_src ) {
         strncpy(str_dst, str_src, len_min);
         str_dst[len_min] = '\0';
         str_dst[len_min + 1] = '\0'; // NULLNULL is proper string ending when parsing utf8
         *len_src = len_min;
+        //debug_print("%s", "everything is gonna be alright");
         return str_dst;
     }
 
@@ -350,16 +378,20 @@ char * utf8toascii(const char *str_src, longlong *len_src,
     if ( iconv(ws->ic, &in_s, (size_t *) len_src, &ret, &len_ret) == (size_t) -1 ) {
         debug_print("in_s(%s) len_src(%lld) len_ret(%lld) error: %s", str_src, *len_src, (long long int) len_ret, strerror(errno));
         if ( errno == E2BIG ) {
-            debug_print("inside E2BIG len_mbsrtowcs(%d) len_src(%lld)", len_mbsrtowcs, *len_src);
-            len_mbsrtowcs = LENGTH_MAX;
+            debug_print("inside E2BIG len_mbsnrtowcs(%d) len_src(%lld)", len_mbsnrtowcs, *len_src);
+            len_mbsnrtowcs = len_min; //LENGTH_MAX;
         } else {
             return NULL;
         }
     }
 
-    *len_src = len_mbsrtowcs; // adjust converted length
-    str_dst[len_mbsrtowcs] = '\0';
-    str_dst[len_mbsrtowcs + 1] = '\0'; // NULLNULL is proper string ending when parsing utf8
+    //*len_src = len_mbsnrtowcs; // adjust converted length
+    //str_dst[len_mbsnrtowcs] = '\0';
+    //str_dst[len_mbsnrtowcs + 1] = '\0'; // NULLNULL is proper string ending when parsing utf8
+
+    *len_src = len_min; // adjust converted length
+    str_dst[len_min] = '\0';
+    str_dst[len_min + 1] = '\0'; // NULLNULL is proper string ending when parsing utf8
 
     if ( iconv(ws->ic, NULL, NULL, NULL, NULL) == (size_t) -1 ) {
         // iconv house cleaning should not fail, but...

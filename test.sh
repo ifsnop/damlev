@@ -10,7 +10,8 @@ done
 
 echo
 echo "old     0m34.461s"
-echo "current 0m16.705s"
+echo "old     0m16.705s"
+echo "current 0m15.962s"
 
 # profiling code
 #valgrind --tool=callgrind bin/mysqldamlev.so

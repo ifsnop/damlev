@@ -11,7 +11,7 @@ CPP_FLAGS := $(CPP_FLAGS_$(ARCH)) -Wall \
 	-I/usr/include/mysql \
 	-lmysqlclient \
 	-DMYSQL_DYNAMIC_PLUGIN \
-	-DDEBUG_MYSQL=1
+	-DDEBUG_MYSQL=0
 
 CC=gcc
 
