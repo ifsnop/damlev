@@ -5,7 +5,7 @@ echo "running performance test"
 for run in {1..30};
 do
 echo -n .
-mysql warez -e "SELECT SQL_NO_CACHE now(),id,word,type,damlevlim(word,'hataraxiada',255) AS cuenta,score FROM lxk_lexicon WHERE damlevlim(word,'hataraxiada',255)<=4 ORDER BY cuenta, score desc LIMIT 10;" > /dev/null
+mysql warez -e "SELECT SQL_NO_CACHE now(),id,word,damlevlim(word,'hataraxiada',12) AS cuenta,score FROM lxk_operational WHERE damlevlim(word,'hataraxiada',12)<=4 ORDER BY cuenta, score desc LIMIT 10;" > /dev/null
 done
 
 echo

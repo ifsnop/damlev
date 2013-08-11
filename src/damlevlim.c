@@ -49,8 +49,8 @@ char * utf8toascii (const char *str_src, longlong *len_src,
 
 #ifdef DEBUG
 #define LENGTH_1 7 // acéhce  len(7) + NULL
-#define LENGTH_2 7 // aceché  len(7) + NULL
-#define LENGTH_LIMIT 7
+#define LENGTH_2 576 // aceché  len(7) + NULL
+#define LENGTH_LIMIT 25
 
 //! main function, only used in testing
 int main(int argc, char *argv[]) {
@@ -81,7 +81,9 @@ int main(int argc, char *argv[]) {
     args->args[2] = (char *) limit_arg_ptr;
 
     strncpy(args->args[0], "ac""\xc3\xa9""cha", LENGTH_1+1);
-    strncpy(args->args[1], "acech""\xc3\xa9", LENGTH_2+1);
+    //strncpy(args->args[1], "acech""\xc3\xa9", LENGTH_2+1);
+    strncpy(args->args[1],"aaaaaaaaaaaaaaaaaaacechaaaaaaaaaaaaaaaaaaaa""\xc3\xa9""aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", LENGTH_2+1);
+
     args->args[0][LENGTH_1] = '\0'; args->args[0][LENGTH_1 + 1] = '\0';
     args->args[1][LENGTH_2] = '\0'; args->args[1][LENGTH_2 + 1] = '\0';
 
@@ -91,7 +93,7 @@ int main(int argc, char *argv[]) {
 
     longlong ret = damlevlim(init, args, is_null, error);
 
-    assert(ret == 1);
+    //assert(ret == 1);
 
     damlevlim_deinit(init);
 
@@ -112,7 +114,6 @@ int main(int argc, char *argv[]) {
 
 }
 #endif // DEBUG
-
 
 //! check parameters and allocate memory for MySql
 my_bool damlevlim_init(UDF_INIT *init, UDF_ARGS *args, char *message) {
@@ -144,11 +145,11 @@ my_bool damlevlim_init(UDF_INIT *init, UDF_ARGS *args, char *message) {
     // attempt to allocate memory in which to calculate distance
     ws = (struct workspace_t *) malloc( sizeof(struct workspace_t) );
     ws->mbstate = (mbstate_t *) malloc( sizeof(mbstate_t) );
-    ws->str1 = (char *) malloc( sizeof(char)*(LENGTH_MAX+1) ); // max allocated for UTF-8 complex string
-    ws->str2 = (char *) malloc( sizeof(char)*(LENGTH_MAX+1) );
-    ws->row0 = (int *) malloc( sizeof(int)*(LENGTH_MAX+1) );
-    ws->row1 = (int *) malloc( sizeof(int)*(LENGTH_MAX+1) );
-    ws->row2 = (int *) malloc( sizeof(int)*(LENGTH_MAX+1) );
+    ws->str1 = (char *) malloc( sizeof(char)*(LENGTH_MAX+2) ); // max allocated for UTF-8 complex string
+    ws->str2 = (char *) malloc( sizeof(char)*(LENGTH_MAX+2) );
+    ws->row0 = (int *) malloc( sizeof(int)*(LENGTH_MAX+2) );
+    ws->row1 = (int *) malloc( sizeof(int)*(LENGTH_MAX+2) );
+    ws->row2 = (int *) malloc( sizeof(int)*(LENGTH_MAX+2) );
     ws->iconv_init = 0;
 
     if ( ws == NULL || ws->mbstate == NULL ||
@@ -190,6 +191,7 @@ longlong damlevlim(UDF_INIT *init, UDF_ARGS *args, char *is_null, char *error) {
     struct workspace_t * ws = (struct workspace_t *) init->ptr;
 
     if (limit >= LENGTH_MAX) {
+        debug_print("parameter limit(%lld) was bigger than compile time constante LENGTH_MAX(%d)", limit, LENGTH_MAX);
         *error = 1; return -1;
     }
 
@@ -210,6 +212,7 @@ longlong damlevlim(UDF_INIT *init, UDF_ARGS *args, char *is_null, char *error) {
                 return limit;
             }
         } else {
+            debug_print("len error]str1(%s) len1(%lld) str2(%s) len2(%lld)", str1, len1, str2, len2);
             *error = 1; return -1;
         }
     }
@@ -298,8 +301,8 @@ int damlevlim_core(struct workspace_t *ws,
         row2 = dummy;
 
         if (row1[len2] >= limit) {
-            debug_print("limit(%d) hit, returning(%d)", limit, row1[len2]);
-            return row1[len2];
+            debug_print("limit(%d) hit, returning(%d)", limit, limit); //row1[len2]);
+            return limit; //row1[len2];
         }
     }
 
@@ -309,15 +312,12 @@ int damlevlim_core(struct workspace_t *ws,
 }
 
 //! helper that translates an utf8 string to ascii with some error return codes
-//char * utf8toascii(const char *str_src, longlong *len_src,
-//    iconv_t ic, mbstate_t *mbstate, char *str_dst) {
 char * utf8toascii(const char *str_src, longlong *len_src,
     struct workspace_t * ws, char *str_dst) {
 
     mbstate_t *mbstate = ws->mbstate;
-    size_t len_mbsrtowcs;
+    size_t len_mbsrtowcs, len_ret = LENGTH_MAX, len_min;
     char *ret = str_dst, *in_s = (char *)str_src; //utf8;
-    size_t retlen = LENGTH_MAX+1;
 
     memset((void *)mbstate, '\0', sizeof(mbstate_t));
     if ( (len_mbsrtowcs = mbsnrtowcs(NULL, &str_src, *len_src, 0, mbstate)) == (size_t) -1 ) {
@@ -325,10 +325,17 @@ char * utf8toascii(const char *str_src, longlong *len_src,
         return NULL;
     }
 
+    if (len_mbsrtowcs < LENGTH_MAX)
+        len_min = len_mbsrtowcs;
+    else
+        len_min = LENGTH_MAX;
+
+    debug_print("len_mbsrtowcs(%d) len_src(%ld) LENGTH_MAX(%d) len_min(%d)", len_mbsrtowcs, (long int) *len_src, LENGTH_MAX, len_min);
     if ( len_mbsrtowcs == *len_src ) {
-        strncpy(str_dst, str_src, len_mbsrtowcs);
-        str_dst[len_mbsrtowcs] = '\0';
-        str_dst[len_mbsrtowcs + 1] = '\0'; // NULLNULL is proper string ending when parsing utf8
+        strncpy(str_dst, str_src, len_min);
+        str_dst[len_min] = '\0';
+        str_dst[len_min + 1] = '\0'; // NULLNULL is proper string ending when parsing utf8
+        *len_src = len_min;
         return str_dst;
     }
 
@@ -340,9 +347,14 @@ char * utf8toascii(const char *str_src, longlong *len_src,
         ws->iconv_init = 1;
     }
 
-    if ( iconv(ws->ic, &in_s, (size_t *) len_src, &ret, &retlen) == (size_t) -1 ) {
-        debug_print("str_src(%s): %s", str_src, strerror(errno));
-        return NULL;
+    if ( iconv(ws->ic, &in_s, (size_t *) len_src, &ret, &len_ret) == (size_t) -1 ) {
+        debug_print("in_s(%s) len_src(%lld) len_ret(%lld) error: %s", str_src, *len_src, (long long int) len_ret, strerror(errno));
+        if ( errno == E2BIG ) {
+            debug_print("inside E2BIG len_mbsrtowcs(%d) len_src(%lld)", len_mbsrtowcs, *len_src);
+            len_mbsrtowcs = LENGTH_MAX;
+        } else {
+            return NULL;
+        }
     }
 
     *len_src = len_mbsrtowcs; // adjust converted length
