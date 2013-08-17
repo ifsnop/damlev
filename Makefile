@@ -29,6 +29,7 @@ mysqldamlevlim: $(SOURCES)
 	$(CC) $(CPP_FLAGS) -pipe -O3 -shared -o lib/$(TARGET) $(SOURCES)
 
 install: mysqldamlevlim
+	strip lib/$(TARGET)
 	install lib/$(TARGET) $(DESTDIR)
 
 clean:
