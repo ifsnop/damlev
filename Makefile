@@ -5,6 +5,7 @@ CPP_FLAGS_32 := -m32
 CPP_FLAGS_64 := -m64
 
 CPP_FLAGS := $(CPP_FLAGS_$(ARCH)) -Wall \
+	-fPIC \
 	-I/usr/local/include/mysql \
 	-L/usr/lib/mysql \
 	-L/usr/local/lib/mysql \
@@ -29,6 +30,7 @@ mysqldamlevlim: $(SOURCES)
 	$(CC) $(CPP_FLAGS) -pipe -O3 -shared -o lib/$(TARGET) $(SOURCES)
 
 install: mysqldamlevlim
+	strip lib/$(TARGET)
 	install lib/$(TARGET) $(DESTDIR)
 
 clean:

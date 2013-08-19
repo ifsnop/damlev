@@ -28,11 +28,11 @@ struct workspace_t {
     char *str1;         //!< internal buffer to store 1st string
     char *str2;         //!< internal buffer to store 2nd string
     int *row0;          //!< round buffer for levenshtein_core function
-    int *row1;
-    int *row2;
+    int *row1;          //!< round buffer for levenshtein_core function
+    int *row2;          //!< round buffer for levenshtein_core function
     mbstate_t *mbstate; //!< buffer for mbsnrtowcs
     iconv_t ic;         //!< buffer for iconv
-    char iconv_init;
+    char iconv_init;    //!< flag indicating if iconv has been inited before
 };
 
 my_bool damlevlim_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
@@ -266,11 +266,9 @@ int damlevlim_core(struct workspace_t *ws,
     const char *str2, int len2,
     int w, int s, int a, int d, int limit) {
 
-//    debug_print("%s", "in damlevlim_core");
-
-    int *row0 = ws->row0; //(int*)malloc(sizeof(int) * (len2 + 1));
-    int *row1 = ws->row1; //(int*)malloc(sizeof(int) * (len2 + 1));
-    int *row2 = ws->row2; //(int*)malloc(sizeof(int) * (len2 + 1));
+    int *row0 = ws->row0;
+    int *row1 = ws->row1;
+    int *row2 = ws->row2; // memory should be allocated in init function
     int i, j;
 
     for (j = 0; j <= len2; j++)
@@ -280,12 +278,6 @@ int damlevlim_core(struct workspace_t *ws,
         int *dummy;
 
         row2[0] = (i + 1) * d;
-/*
-        debug_print("%s", "=======================");
-        for(j=0; j<len1; j++) {
-            debug_print("%d %d %d", row0[j], row1[j], row2[j]);
-        }
-*/
         for (j = 0; j < len2; j++) {
             /* substitution */
             row2[j + 1] = row1[j] + s * (str1[i] != str2[j]);
@@ -309,23 +301,9 @@ int damlevlim_core(struct workspace_t *ws,
         row0 = row1;
         row1 = row2;
         row2 = dummy;
-/*
-        if (row1[len2] >= limit) {
-            debug_print("limit(%d) hit, row1(len2)(%d) i(%d) j(%d) returning(%d)", limit, row1[len2], i, j, limit); //row1[len2]);
-            for(j=0; j<len1; j++) {
-                debug_print("%d %d %d", row2[j], row0[j], row1[j]);
-            }
-
-            return limit; //row1[len2];
-        }
-*/
     }
 
     debug_print("returning(%d)", row1[len2]);
-/*    for(j=0; j<i; j++) {
-        debug_print("%d %d %d", row2[j], row0[j], row1[j]);
-    }
-*/
     return row1[len2];
 }
 
@@ -343,27 +321,19 @@ char * utf8toascii(const char *str_src, longlong *len_src,
         return NULL;
     }
 
-    //debug_print("0] len_mbsrtowcs(%lld) limit(%d) LENGTH_MAX(%d) min(%d)", (long long int) len_mbsrtowcs, limit, LENGTH_MAX, len_min);
-
-    //len_min = MIN(len_mbsrtowcs, MIN(limit,LENGTH_MAX));
-
     len_min = MIN(len_mbsnrtowcs, limit);
 
-    debug_print("1] len_mbsnrtowcs(%lld) limit(%d) LENGTH_MAX(%d) min(%d)", (long long int) len_mbsnrtowcs, limit, LENGTH_MAX, len_min);
-
-/*    if (len_mbsrtowcs < LENGTH_MAX)
-        len_min = len_mbsrtowcs;
-    else
-        len_min = LENGTH_MAX;
-*/
-    //*len_src = len_min;
+    debug_print("1] len_mbsnrtowcs(%zu) limit(%d) LENGTH_MAX(%d) min(%zu)",
+        len_mbsnrtowcs,
+        limit,
+        LENGTH_MAX,
+        len_min);
 
     if ( len_mbsnrtowcs == *len_src ) {
         strncpy(str_dst, str_src, len_min);
         str_dst[len_min] = '\0';
         str_dst[len_min + 1] = '\0'; // NULLNULL is proper string ending when parsing utf8
         *len_src = len_min;
-        //debug_print("%s", "everything is gonna be alright");
         return str_dst;
     }
 
@@ -376,25 +346,27 @@ char * utf8toascii(const char *str_src, longlong *len_src,
     }
 
     if ( iconv(ws->ic, &in_s, (size_t *) len_src, &ret, &len_ret) == (size_t) -1 ) {
-        debug_print("in_s(%s) len_src(%lld) len_ret(%lld) error: %s", str_src, *len_src, (long long int) len_ret, strerror(errno));
+        debug_print("in_s(%s) len_src(%lld) len_ret(%zu) error: %s",
+            str_src,
+            *len_src,
+            len_ret,
+            strerror(errno));
         if ( errno == E2BIG ) {
-            debug_print("inside E2BIG len_mbsnrtowcs(%d) len_src(%lld)", len_mbsnrtowcs, *len_src);
+            debug_print("inside E2BIG len_mbsnrtowcs(%zu) len_src(%lld)",
+                len_mbsnrtowcs,
+                *len_src);
             len_mbsnrtowcs = len_min; //LENGTH_MAX;
         } else {
             return NULL;
         }
     }
 
-    //*len_src = len_mbsnrtowcs; // adjust converted length
-    //str_dst[len_mbsnrtowcs] = '\0';
-    //str_dst[len_mbsnrtowcs + 1] = '\0'; // NULLNULL is proper string ending when parsing utf8
-
     *len_src = len_min; // adjust converted length
     str_dst[len_min] = '\0';
     str_dst[len_min + 1] = '\0'; // NULLNULL is proper string ending when parsing utf8
 
+    // iconv house cleaning as per man 3 iconv_open
     if ( iconv(ws->ic, NULL, NULL, NULL, NULL) == (size_t) -1 ) {
-        // iconv house cleaning should not fail, but...
         return NULL;
     }
 
