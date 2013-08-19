@@ -323,7 +323,11 @@ char * utf8toascii(const char *str_src, longlong *len_src,
 
     len_min = MIN(len_mbsnrtowcs, limit);
 
-    debug_print("1] len_mbsnrtowcs(%lld) limit(%d) LENGTH_MAX(%d) min(%d)", (long long int) len_mbsnrtowcs, limit, LENGTH_MAX, len_min);
+    debug_print("1] len_mbsnrtowcs(%zu) limit(%d) LENGTH_MAX(%d) min(%zu)",
+        len_mbsnrtowcs,
+        limit,
+        LENGTH_MAX,
+        len_min);
 
     if ( len_mbsnrtowcs == *len_src ) {
         strncpy(str_dst, str_src, len_min);
@@ -342,9 +346,15 @@ char * utf8toascii(const char *str_src, longlong *len_src,
     }
 
     if ( iconv(ws->ic, &in_s, (size_t *) len_src, &ret, &len_ret) == (size_t) -1 ) {
-        debug_print("in_s(%s) len_src(%lld) len_ret(%lld) error: %s", str_src, *len_src, (long long int) len_ret, strerror(errno));
+        debug_print("in_s(%s) len_src(%lld) len_ret(%zu) error: %s",
+            str_src,
+            *len_src,
+            len_ret,
+            strerror(errno));
         if ( errno == E2BIG ) {
-            debug_print("inside E2BIG len_mbsnrtowcs(%d) len_src(%lld)", len_mbsnrtowcs, *len_src);
+            debug_print("inside E2BIG len_mbsnrtowcs(%zu) len_src(%lld)",
+                len_mbsnrtowcs,
+                *len_src);
             len_mbsnrtowcs = len_min; //LENGTH_MAX;
         } else {
             return NULL;

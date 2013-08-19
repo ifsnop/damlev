@@ -5,6 +5,7 @@ CPP_FLAGS_32 := -m32
 CPP_FLAGS_64 := -m64
 
 CPP_FLAGS := $(CPP_FLAGS_$(ARCH)) -Wall \
+	-fPIC \
 	-I/usr/local/include/mysql \
 	-L/usr/lib/mysql \
 	-L/usr/local/lib/mysql \
