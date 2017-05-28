@@ -14,13 +14,23 @@ Redistribute as you wish, but leave this information intact.
 
 Compiling
 
-    Run make. It will try to autodetect architecture and generate
-    32 or x86_64 bit version.
-    Enable testing with "make debug". An executable instead of
+    Run make.    It will try to autodetect architecture and generate 32 or x86_64 bit
+    version. Enable testing with "make debug". An executable instead of
     a library will be built. Execute it to run some tests regarding
     memory allocation and levenshtein core calculations.
 
-    If you get this error when compiling:
+    Errors you may get when compiling:
+
+In file included from ./src/damlevlim.c:16:0:
+./src/damlevlim.h:26:23: fatal error: my_global.h: No such file or directory
+#include <my_global.h>
+                   ^
+compilation terminated.
+Makefile:30: recipe for target 'mysqldamlevlim' failed
+make: *** [mysqldamlevlim] Error 1
+
+    Development libraries from mysql are missing.
+    Do "sudo apt-get install libmysqlclient-dev"
 
 /usr/include/gnu/stubs.h:7:27: fatal error: gnu/stubs-32.h: No such file or directory
 
@@ -28,14 +38,13 @@ Compiling
 
 http://stackoverflow.com/questions/7412548/gnu-stubs-32-h-no-such-file-or-directory
 
-    - On Ubuntu it's called libc6-dev-i386 - do sudo apt-get install
+    - On Ubuntu it's called libc6-dev-i386 - do "sudo apt-get install"
     libc6-dev-i386. See below for extra instructions for Ubuntu 12.04.
     - On Red Hat distros, the package name is glibc-devel.i686 (Thanks to
     David Gardner's comment)
     - On CentOS 5.8, the package name is glibc-devel.i386 (Thanks to JimKleck's comment)
     - On CentOS 6.3, the package name is glibc-devel.i686.
     - On SLES it's called glibc-devel-32bit - do zypper in glibc-devel-32bit
-
 
 Loading UDFs in MySQL STEP 1
 
